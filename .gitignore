@@ -1,0 +1,16 @@
+# Swift build products and local package state
+.build/
+.swiftpm/
+DerivedData/
+
+# Packaged app artifacts live here so Spotlight only indexes the installed app.
+.artifacts.noindex/
+build/
+
+# Local machine state
+.DS_Store
+*.xcuserstate
+*.log
+.env
+.env.*
+!.env.example
