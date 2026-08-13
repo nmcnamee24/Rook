@@ -1,0 +1,327 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B10000000000000000000001 /* RookMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000101 /* RookMobileApp.swift */; };
+		B10000000000000000000002 /* RookMobileDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000102 /* RookMobileDesign.swift */; };
+		B10000000000000000000003 /* RookMobileRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000103 /* RookMobileRootView.swift */; };
+		B10000000000000000000004 /* RookMobileCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000104 /* RookMobileCanvasView.swift */; };
+		B10000000000000000000005 /* RookMobileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000105 /* RookMobileViewModel.swift */; };
+		B10000000000000000000006 /* RookMobileTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000106 /* RookMobileTransport.swift */; };
+		B10000000000000000000007 /* RookMobileKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000107 /* RookMobileKeychain.swift */; };
+		B10000000000000000000008 /* RookMobileVoiceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000108 /* RookMobileVoiceController.swift */; };
+		B10000000000000000000009 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000109 /* Models.swift */; };
+		B1000000000000000000000A /* RookMobileProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000010A /* RookMobileProtocol.swift */; };
+		B1000000000000000000000B /* RookMobileQRScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000010C /* RookMobileQRScanner.swift */; };
+		B1000000000000000000000C /* RookMobileSecureChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000010D /* RookMobileSecureChannel.swift */; };
+		B1000000000000000000000D /* RookImageSourceValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000010F /* RookImageSourceValidator.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B10000000000000000000101 /* RookMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookMobileApp.swift; sourceTree = "<group>"; };
+		B10000000000000000000102 /* RookMobileDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookMobileDesign.swift; sourceTree = "<group>"; };
+		B10000000000000000000103 /* RookMobileRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookMobileRootView.swift; sourceTree = "<group>"; };
+		B10000000000000000000104 /* RookMobileCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookMobileCanvasView.swift; sourceTree = "<group>"; };
+		B10000000000000000000105 /* RookMobileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookMobileViewModel.swift; sourceTree = "<group>"; };
+		B10000000000000000000106 /* RookMobileTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookMobileTransport.swift; sourceTree = "<group>"; };
+		B10000000000000000000107 /* RookMobileKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookMobileKeychain.swift; sourceTree = "<group>"; };
+		B10000000000000000000108 /* RookMobileVoiceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookMobileVoiceController.swift; sourceTree = "<group>"; };
+		B10000000000000000000109 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		B1000000000000000000010A /* RookMobileProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookMobileProtocol.swift; sourceTree = "<group>"; };
+		B1000000000000000000010B /* Rook.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Rook.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1000000000000000000010C /* RookMobileQRScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookMobileQRScanner.swift; sourceTree = "<group>"; };
+		B1000000000000000000010D /* RookMobileSecureChannel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookMobileSecureChannel.swift; sourceTree = "<group>"; };
+		B1000000000000000000010E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B1000000000000000000010F /* RookImageSourceValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RookImageSourceValidator.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B10000000000000000000201 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		B10000000000000000000301 = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000302 /* Mobile */,
+				B10000000000000000000303 /* Sources/RookKit */,
+				B10000000000000000000304 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B10000000000000000000302 /* Mobile */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000010E /* Info.plist */,
+				B10000000000000000000101 /* RookMobileApp.swift */,
+				B10000000000000000000102 /* RookMobileDesign.swift */,
+				B10000000000000000000103 /* RookMobileRootView.swift */,
+				B10000000000000000000104 /* RookMobileCanvasView.swift */,
+				B10000000000000000000105 /* RookMobileViewModel.swift */,
+				B10000000000000000000106 /* RookMobileTransport.swift */,
+				B10000000000000000000107 /* RookMobileKeychain.swift */,
+				B10000000000000000000108 /* RookMobileVoiceController.swift */,
+				B1000000000000000000010C /* RookMobileQRScanner.swift */,
+			);
+			path = Mobile;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000303 /* Sources/RookKit */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000109 /* Models.swift */,
+				B1000000000000000000010A /* RookMobileProtocol.swift */,
+				B1000000000000000000010D /* RookMobileSecureChannel.swift */,
+				B1000000000000000000010F /* RookImageSourceValidator.swift */,
+			);
+			path = Sources/RookKit;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000304 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B1000000000000000000010B /* Rook.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B10000000000000000000401 /* RookMobile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B10000000000000000000802 /* Build configuration list for PBXNativeTarget "RookMobile" */;
+			buildPhases = (
+				B10000000000000000000501 /* Sources */,
+				B10000000000000000000201 /* Frameworks */,
+				B10000000000000000000601 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = RookMobile;
+			productName = Rook;
+			productReference = B1000000000000000000010B /* Rook.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B10000000000000000000701 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					B10000000000000000000401 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = B10000000000000000000801 /* Build configuration list for PBXProject "RookMobile" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = B10000000000000000000301;
+			productRefGroup = B10000000000000000000304 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B10000000000000000000401 /* RookMobile */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B10000000000000000000601 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B10000000000000000000501 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000001 /* RookMobileApp.swift in Sources */,
+				B10000000000000000000002 /* RookMobileDesign.swift in Sources */,
+				B10000000000000000000003 /* RookMobileRootView.swift in Sources */,
+				B10000000000000000000004 /* RookMobileCanvasView.swift in Sources */,
+				B10000000000000000000005 /* RookMobileViewModel.swift in Sources */,
+				B10000000000000000000006 /* RookMobileTransport.swift in Sources */,
+				B10000000000000000000007 /* RookMobileKeychain.swift in Sources */,
+				B10000000000000000000008 /* RookMobileVoiceController.swift in Sources */,
+				B10000000000000000000009 /* Models.swift in Sources */,
+				B1000000000000000000000A /* RookMobileProtocol.swift in Sources */,
+				B1000000000000000000000B /* RookMobileQRScanner.swift in Sources */,
+				B1000000000000000000000C /* RookMobileSecureChannel.swift in Sources */,
+				B1000000000000000000000D /* RookImageSourceValidator.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		B10000000000000000000901 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		B10000000000000000000902 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		B10000000000000000000903 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = NHQ952894A;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Mobile/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Rook;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Rook uses Face ID to confirm consequential approvals.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Rook uses the camera to scan the one-time pairing QR code shown on your Mac.";
+				INFOPLIST_KEY_NSBonjourServices = (
+					"_rook._tcp",
+				);
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Rook connects privately to Rook running on your Mac.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rook uses the microphone only while you hold a voice conversation.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Rook transcribes your command on this iPhone.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.noah.rook.mobile;
+				PRODUCT_NAME = Rook;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		B10000000000000000000904 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = NHQ952894A;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Mobile/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Rook;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Rook uses Face ID to confirm consequential approvals.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Rook uses the camera to scan the one-time pairing QR code shown on your Mac.";
+				INFOPLIST_KEY_NSBonjourServices = (
+					"_rook._tcp",
+				);
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Rook connects privately to Rook running on your Mac.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Rook uses the microphone only while you hold a voice conversation.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Rook transcribes your command on this iPhone.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.noah.rook.mobile;
+				PRODUCT_NAME = Rook;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B10000000000000000000801 /* Build configuration list for PBXProject "RookMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B10000000000000000000901 /* Debug */,
+				B10000000000000000000902 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B10000000000000000000802 /* Build configuration list for PBXNativeTarget "RookMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B10000000000000000000903 /* Debug */,
+				B10000000000000000000904 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = B10000000000000000000701 /* Project object */;
+}

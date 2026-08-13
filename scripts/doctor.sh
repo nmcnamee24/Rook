@@ -3,7 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
 PROJECT_DIR="${SCRIPT_DIR:h}"
-INSTALLED="/Users/noahmcnamee/Applications/Rook.app/Contents/MacOS/Rook"
+ROOK_USER_HOME="${HOME:?A user home directory is required}"
+INSTALL_ROOT="${ROOK_INSTALL_ROOT:-$ROOK_USER_HOME/Applications}"
+INSTALLED="$INSTALL_ROOT/Rook.app/Contents/MacOS/Rook"
 BUILT="$PROJECT_DIR/.artifacts.noindex/Rook.app/Contents/MacOS/Rook"
 
 if [[ -x "$INSTALLED" ]]; then

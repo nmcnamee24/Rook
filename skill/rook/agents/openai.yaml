@@ -1,0 +1,4 @@
+interface:
+  display_name: "Rook"
+  short_description: "Local-first personal operations with approvals"
+  default_prompt: "Use $rook for a brief, a fast local command, prepared action, or approval-queue review."

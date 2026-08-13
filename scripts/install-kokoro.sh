@@ -1,7 +1,8 @@
 #!/bin/zsh
 set -euo pipefail
 
-TTS_DIR="/Users/noahmcnamee/.codex/rook/tts"
+ROOK_USER_HOME="${HOME:?A user home directory is required}"
+TTS_DIR="${ROOK_TTS_DIR:-$ROOK_USER_HOME/.codex/rook/tts}"
 MODEL="$TTS_DIR/kokoro-v1.0.onnx"
 VOICES="$TTS_DIR/voices-v1.0.bin"
 MODEL_SHA256="7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5"

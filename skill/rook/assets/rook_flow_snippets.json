@@ -1,0 +1,34 @@
+[
+  {
+    "name": "rook brief",
+    "text": "[ROOK VOICE] Give me a live brief from today's primary Calendar and important recent Gmail. Include conflicts, deadlines, and the next three useful moves."
+  },
+  {
+    "name": "rook changes",
+    "text": "[ROOK VOICE] Show only meaningful changes since the last Rook brief or follow-up check. Suppress repeated items and routine noise."
+  },
+  {
+    "name": "rook plan",
+    "text": "[ROOK VOICE] Build a realistic plan using my live Calendar and current priorities. Propose changes but do not modify anything without approval."
+  },
+  {
+    "name": "rook prep",
+    "text": "[ROOK VOICE] Prepare the following as a draft. Do not send or make an external change; queue anything that needs approval:"
+  },
+  {
+    "name": "rook queue",
+    "text": "[ROOK VOICE] Show my pending Rook approval queue with numbered positions, short human labels, and enough detail to verify each action. Keep internal queue IDs hidden."
+  },
+  {
+    "name": "rook approve",
+    "text": "[ROOK VOICE] Approve Rook queue"
+  },
+  {
+    "name": "rook reject",
+    "text": "[ROOK VOICE] Reject Rook queue"
+  },
+  {
+    "name": "rook speak",
+    "text": "[ROOK VOICE] Answer the following in two concise sentences suitable for spoken playback:"
+  }
+]

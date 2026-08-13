@@ -1,9 +1,11 @@
 #!/bin/zsh
 set -euo pipefail
 
-TARGET_APP="/Users/noahmcnamee/Applications/Rook.app"
-LOGIN_PLIST="/Users/noahmcnamee/Library/LaunchAgents/com.noah.rook.login.plist"
-TRASH_DIR="/Users/noahmcnamee/.Trash/Rook-uninstall-$(date +%Y%m%d-%H%M%S)"
+ROOK_USER_HOME="${HOME:?A user home directory is required}"
+INSTALL_ROOT="${ROOK_INSTALL_ROOT:-$ROOK_USER_HOME/Applications}"
+TARGET_APP="$INSTALL_ROOT/Rook.app"
+LOGIN_PLIST="$ROOK_USER_HOME/Library/LaunchAgents/com.noah.rook.login.plist"
+TRASH_DIR="$ROOK_USER_HOME/.Trash/Rook-uninstall-$(date +%Y%m%d-%H%M%S)"
 
 /usr/bin/pkill -x Rook 2>/dev/null || true
 /bin/launchctl bootout "gui/$(id -u)/com.noah.rook.login" 2>/dev/null || true
@@ -17,4 +19,4 @@ if [[ -f "$LOGIN_PLIST" ]]; then
 fi
 
 echo "Moved the Rook app and login item to $TRASH_DIR"
-echo "Private state remains at /Users/noahmcnamee/.codex/rook/core"
+echo "Private state remains at $ROOK_USER_HOME/.codex/rook/core"

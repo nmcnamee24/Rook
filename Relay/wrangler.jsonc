@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rook-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-12",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOK_RELAY",
+        "class_name": "RookRelayRoom"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["RookRelayRoom"]
+    }
+  ],
+  "observability": {
+    "enabled": false
+  }
+}
