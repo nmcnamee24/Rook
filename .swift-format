@@ -1,0 +1,17 @@
+{
+  "indentation": {
+    "spaces": 2
+  },
+  "lineLength": 120,
+  "multiElementCollectionTrailingCommas": true,
+  "respectsExistingLineBreaks": true,
+  "rules": {
+    "AllPublicDeclarationsHaveDocumentation": false,
+    "NeverForceUnwrap": false,
+    "NeverUseForceTry": false,
+    "NeverUseImplicitlyUnwrappedOptionals": false,
+    "NoLeadingUnderscores": false,
+    "OrderedImports": true
+  },
+  "version": 1
+}

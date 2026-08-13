@@ -9,8 +9,17 @@ build/
 
 # Local machine state
 .DS_Store
+.idea/
+.vscode/
+__pycache__/
+*.py[cod]
+*.swp
+*.swo
 *.xcuserstate
+xcuserdata/
 *.log
+node_modules/
+.wrangler/
 .env
 .env.*
 !.env.example
