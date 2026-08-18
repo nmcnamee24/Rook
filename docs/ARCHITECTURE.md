@@ -107,6 +107,12 @@ flowchart LR
 
 The iOS client discovers the paired Mac by a random stable Bonjour service identity. Initial pairing uses a five-minute QR secret on the same local network; later connections use a per-device session secret held in both Keychains. The phone tries Bonjour first and then the built-in WSS relay. Each relay room name is derived from the session token, but the session token and plaintext never reach the relay. The Mac revalidates encryption, direction, timestamp, replay ID, paired device, and exact queue decisions before routing anything into central Rook.
 
+## Planned always-on Windows authority
+
+The next distributed architecture separates an always-on Windows service from login-scoped Windows desktop capabilities. The service becomes the one durable authority; Rook Desktop and the existing Mac app become capability-bearing device nodes, and the iPhone pairs to the authority. This is a planned architecture, not current behavior.
+
+The complete process model, authority-transfer protocol, node envelopes, security boundary, recovery design, delivery slices, and installed-system exit gates are defined in [Always-on Windows Rook Core](WINDOWS_CORE.md).
+
 ## Versioned integration
 
 The repository copy at `skill/rook/` is canonical. `scripts/install.sh` synchronizes it to `~/.codex/skills/rook` before launching the app. Any feature that changes routing, safety, state, voice behavior, Canvas, or local capabilities must update both application documentation and the canonical skill in the same change.

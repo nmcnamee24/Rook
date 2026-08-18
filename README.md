@@ -10,6 +10,7 @@ Rook is a private macOS voice companion and command center, with a native iPhone
 ## Repository guide
 
 - [Architecture](docs/ARCHITECTURE.md) explains routing, components, and trust boundaries.
+- [Always-on Windows Core](docs/WINDOWS_CORE.md) defines the planned Windows authority, desktop-node split, protocol, security, recovery, and rollout gates; it is design-only today.
 - [Development log](docs/DEVELOPMENT_LOG.md) records product-critical gaps, benchmarks, and current engineering priorities.
 - [Contributing](CONTRIBUTING.md) defines the development and verification workflow.
 - [Security policy](SECURITY.md) documents private reporting and protected boundaries.

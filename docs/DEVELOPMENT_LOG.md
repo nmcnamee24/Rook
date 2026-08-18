@@ -604,3 +604,24 @@ The correct sequence is therefore:
 > prove usefulness and reliability on the current system → extract the reusable control-plane kernel → move authority off the Mac → scale integrations behind the invisible product surface
 
 Rook earns the right to become a platform only after its first narrow workflows are boringly reliable and meaningfully better than using the underlying tools directly.
+
+## 2026-08-18 — Always-on Windows Core design
+
+The Windows hosting direction now has an implementation-ready design in [Always-on Windows Rook Core](WINDOWS_CORE.md).
+
+The central decision is to split the PC deployment into a boot-time **Rook Host** authority and a login-scoped **Rook Desktop** capability node. Windows services cannot safely own interactive screen, app, browser, microphone, or approval UI surfaces, while a tray process alone would disappear at sign-out and would not be an always-on Core.
+
+The design specifies:
+
+- one manually configured authority with no Mac/Windows/cloud election;
+- a cross-platform host kernel and a Windows Service Control Manager shell;
+- versioned client and node contracts, capability manifests, deadlines, cancellation, idempotency, and verified receipts;
+- an explicit `outcome_unknown` state that prevents uncertain mutations from being repeated;
+- local named-pipe IPC with explicit Windows ACLs and end-to-end encrypted nearby/relay device transport;
+- service-identity DPAPI protection, provider reauthorization, and no automatic Mac Keychain or phone-secret transfer;
+- transactional SQLite state, an outbox, consistent backups, restore drills, and bounded service recovery;
+- a two-phase Mac-to-Windows authority move that increments one authority epoch and prevents split brain;
+- read-only Mac-node delivery before Windows interactive capabilities; and
+- installed-system gates covering reboot, logoff, lock, Mac disconnect/reconnect, relay loss, replay, approval change, provider expiry, seven-day soak, and restore.
+
+This entry records a design only. The current macOS app remains authoritative, `Package.swift` remains macOS-only, and no Windows service, desktop companion, cross-platform host, node contract, or state migration has been implemented or installed.
