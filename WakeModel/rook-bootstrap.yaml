@@ -1,0 +1,43 @@
+model_name: rook_bootstrap
+target_phrases: ["rook"]
+
+n_samples: 500
+n_samples_val: 100
+n_background_samples: 100
+n_background_samples_val: 20
+tts_batch_size: 10
+
+custom_negative_phrases:
+  - "look"
+  - "book"
+  - "brook"
+  - "brooke"
+  - "crook"
+  - "rookie"
+
+data_dir: ./.artifacts.noindex/wake-training-bootstrap/data
+output_dir: ./.artifacts.noindex/wake-training-bootstrap/output
+
+augmentation:
+  clip_duration: 2.0
+  batch_size: 8
+  rounds: 2
+  background_paths: [./.artifacts.noindex/wake-training-bootstrap/data/backgrounds]
+  rir_paths: [./.artifacts.noindex/wake-training-bootstrap/data/rirs]
+
+model:
+  model_type: conv_attention
+  model_size: small
+
+steps: 5000
+learning_rate: 0.0002
+weight_decay: 0.01
+label_smoothing: 0.05
+max_negative_weight: 2000
+target_fp_per_hour: 0.25
+
+batch_n_per_class:
+  positive: 24
+  adversarial_negative: 32
+  ACAV100M_sample: 0
+  background_noise: 24

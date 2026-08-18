@@ -396,7 +396,7 @@ public struct QuickRookResponse: Codable, Equatable, Sendable {
         },
         "intent": {
           "type": "string",
-          "enum": ["answer", "brief", "plan", "draft", "queue", "approval", "status", "error"]
+          "enum": ["answer", "brief", "plan", "draft", "queue", "approval", "status", "coding", "clarification", "error"]
         },
         "pawns": {
           "type": "array",
@@ -500,7 +500,7 @@ public struct RookResponse: Codable, Equatable, Sendable {
         },
         "intent": {
           "type": "string",
-          "enum": ["answer", "brief", "plan", "draft", "queue", "approval", "status", "error"]
+          "enum": ["answer", "brief", "plan", "draft", "queue", "approval", "status", "coding", "clarification", "error"]
         },
         "requires_approval": {
           "type": "boolean"
@@ -581,6 +581,12 @@ public struct DoctorResult: Codable {
   public let codexExecutable: Bool
   public let authentication: String
   public let queueHealthy: Bool
+  public let wakeEngine: String
+  public let wakeHelperInstalled: Bool
+  public let wakeModelEnrolled: Bool
+  public let wakeModelValidated: Bool
+  public let wakeModelTrialActive: Bool
+  public let wakeRuntimeHealthy: Bool
   public let stateDirectory: String
   public let notes: [String]
 
@@ -590,6 +596,12 @@ public struct DoctorResult: Codable {
     case codexExecutable = "codex_executable"
     case authentication
     case queueHealthy = "queue_healthy"
+    case wakeEngine = "wake_engine"
+    case wakeHelperInstalled = "wake_helper_installed"
+    case wakeModelEnrolled = "wake_model_enrolled"
+    case wakeModelValidated = "wake_model_validated"
+    case wakeModelTrialActive = "wake_model_trial_active"
+    case wakeRuntimeHealthy = "wake_runtime_healthy"
     case stateDirectory = "state_directory"
     case notes
   }

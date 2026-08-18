@@ -46,18 +46,12 @@ final class RookInferenceLayerTests: XCTestCase {
     )
   }
 
-  func testAtomicFindAndPlayIsUnderstoodBeforeHybridClauseSplitting() {
+  func testSemanticFindAndPlayIsLeftToCentralRook() {
     let interpretation = RookInferenceLayer.interpret("Find and play me a study playlist.")
     let decision = RookInferenceLayer.decide(interpretation)
 
-    XCTAssertEqual(interpretation.basis, .semanticCapability)
-    XCTAssertEqual(
-      decision.resolution,
-      .spotify(.playForPurpose(purposes: [.study]))
-    )
-    if case .hybrid = decision.resolution {
-      XCTFail("One Spotify action must not become a pawn-backed hybrid plan")
-    }
+    XCTAssertEqual(interpretation.basis, .explicit)
+    XCTAssertEqual(decision.resolution, .unclaimed)
   }
 
   func testReferentialSpotifyPlaybackUsesTheSelectedRecentPlaylist() {
@@ -169,14 +163,15 @@ final class RookInferenceLayerTests: XCTestCase {
     XCTAssertTrue(message.contains("Which Spotify playlist"))
   }
 
-  func testGenuineCrossDomainWorkStillBecomesAHybridPlan() {
+  func testCrossDomainWorkGoesIntactToCentralRook() {
     let interpretation = RookInferenceLayer.interpret(
       "Open Spotify and research the artist playing right now"
     )
     let decision = RookInferenceLayer.decide(interpretation)
 
-    guard case .hybrid(let plan) = decision.resolution else {
-      return XCTFail("Expected a true direct-plus-research request to stay hybrid")
+    XCTAssertEqual(decision.resolution, .unclaimed)
+    guard let plan = RookHybridCapabilityPlanner.plan(interpretation.effectiveCommand) else {
+      return XCTFail("The legacy planner remains available only for restored in-flight work")
     }
     XCTAssertEqual(plan.steps.map(\.owner), [.central, .pawnEligible])
   }

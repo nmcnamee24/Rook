@@ -2,13 +2,13 @@ import RookKit
 import SwiftUI
 
 enum RookPalette {
-  // Steel Blue Rook: one brand accent, one success color, and quiet warm neutrals.
-  static let paper = Color(red: 247 / 255, green: 246 / 255, blue: 242 / 255)
+  // Adaptive foregrounds and translucent washes keep native glass readable in either appearance.
+  static let paper = Color.primary.opacity(0.055)
   static let paperBright = Color.white
-  static let ink = Color(red: 25 / 255, green: 26 / 255, blue: 29 / 255)
-  static let muted = Color(red: 111 / 255, green: 112 / 255, blue: 109 / 255)
+  static let ink = Color.primary.opacity(0.94)
+  static let muted = Color.secondary
   static let faint = muted.opacity(0.72)
-  static let line = Color(red: 222 / 255, green: 220 / 255, blue: 213 / 255)
+  static let line = Color.primary.opacity(0.20)
   static let accent = Color(red: 70 / 255, green: 130 / 255, blue: 180 / 255)
   static let green = Color(red: 46 / 255, green: 139 / 255, blue: 87 / 255)
 }
@@ -102,22 +102,22 @@ struct RookDashboardView: View {
   @FocusState private var commandFocused: Bool
 
   var body: some View {
-    VStack(spacing: 0) {
-      topBar
-      Rectangle()
-        .fill(RookPalette.line.opacity(0.72))
-        .frame(height: 1)
-      ZStack(alignment: .bottom) {
-        sectionContent
-        voiceDock
-          .padding(.horizontal, 72)
-          .padding(.bottom, 30)
+    GlassEffectContainer(spacing: 18) {
+      VStack(spacing: 0) {
+        topBar
+        Rectangle()
+          .fill(RookPalette.line.opacity(0.72))
+          .frame(height: 1)
+        ZStack(alignment: .bottom) {
+          sectionContent
+          voiceDock
+            .padding(.horizontal, 72)
+            .padding(.bottom, 30)
+        }
       }
     }
     .frame(minWidth: 1_060, minHeight: 720)
-    .background(RookPalette.paper.ignoresSafeArea())
-    .ignoresSafeArea(.container, edges: .top)
-    .preferredColorScheme(.light)
+    .background(Color.clear.ignoresSafeArea())
     .sheet(item: $model.selectedReviewItem) { item in
       reviewSheet(item)
     }
@@ -181,7 +181,7 @@ struct RookDashboardView: View {
     .padding(.trailing, 30)
     .padding(.top, 10)
     .frame(height: 54)
-    .background(RookPalette.paperBright)
+    .rookGlassPlane(tintOpacity: 0.035)
   }
 
   @ViewBuilder
@@ -416,7 +416,7 @@ struct RookDashboardView: View {
       .padding(.horizontal, 34)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .background(RookPalette.paperBright)
+    .rookGlassPlane(tintOpacity: 0.025)
   }
 
   private var emptyPawnState: some View {
@@ -531,10 +531,10 @@ struct RookDashboardView: View {
 
         if model.pawnRuns.isEmpty {
           VStack(alignment: .leading, spacing: 9) {
-            Text("No crews yet")
+            Text("No activity yet")
               .font(.system(size: 23, design: .serif))
               .foregroundStyle(RookPalette.ink)
-            Text("Complex requests will appear here with each pawn instance, assignment, and live status.")
+            Text("Codex tasks and complex requests will appear here with their owner and live status.")
               .font(.system(size: 14))
               .foregroundStyle(RookPalette.muted)
           }
@@ -563,11 +563,11 @@ struct RookDashboardView: View {
 
   private var workforceSummary: some View {
     HStack(spacing: 28) {
-      workforceMetric(value: "\(model.activePawnRuns.count)", label: "active crews")
+      workforceMetric(value: "\(model.activePawnRuns.count)", label: "active work")
       summaryDivider
       workforceMetric(value: "\(model.activePawnCount)", label: "pawns working")
       summaryDivider
-      workforceMetric(value: "\(model.completedPawnCount)", label: "completed")
+      workforceMetric(value: "\(model.completedWorkCount)", label: "completed work")
       summaryDivider
       workforceMetric(value: "10", label: "capacity / prompt")
       Spacer(minLength: 0)
@@ -608,7 +608,7 @@ struct RookDashboardView: View {
           .font(.system(size: 11.5, weight: .medium))
           .foregroundStyle(RookPalette.muted)
         Spacer()
-        Text(roleSummary(run.pawns))
+        Text(run.isCodexTask ? "Full Codex" : roleSummary(run.pawns))
           .font(.system(size: 11.5, weight: .medium))
           .foregroundStyle(RookPalette.muted)
       }
@@ -627,18 +627,43 @@ struct RookDashboardView: View {
           .padding(.top, 8)
       }
 
-      VStack(spacing: 0) {
-        ForEach(Array(run.pawns.enumerated()), id: \.offset) { index, pawn in
-          pawnActivityRow(pawn)
-          if index < run.pawns.count - 1 {
-            Rectangle()
-              .fill(RookPalette.line.opacity(0.65))
-              .frame(height: 1)
-              .padding(.leading, 48)
+      if run.isCodexTask {
+        HStack(spacing: 13) {
+          Image(systemName: "chevron.left.forwardslash.chevron.right")
+            .font(.system(size: 15, weight: .medium))
+            .foregroundStyle(RookPalette.ink)
+            .frame(width: 34, height: 34)
+            .background(RookPalette.accent.opacity(0.07), in: Circle())
+          VStack(alignment: .leading, spacing: 3) {
+            Text("Full Codex task")
+              .font(.system(size: 13.5, weight: .semibold))
+              .foregroundStyle(RookPalette.ink)
+            Text(codexTaskDetail(run))
+              .font(.system(size: 12.5))
+              .foregroundStyle(RookPalette.muted)
+              .lineLimit(2)
+          }
+          Spacer(minLength: 16)
+          Text(run.status.label)
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(runStatusColor(run.status))
+        }
+        .padding(.top, 14)
+        .padding(.vertical, 10)
+      } else {
+        VStack(spacing: 0) {
+          ForEach(Array(run.pawns.enumerated()), id: \.offset) { index, pawn in
+            pawnActivityRow(pawn)
+            if index < run.pawns.count - 1 {
+              Rectangle()
+                .fill(RookPalette.line.opacity(0.65))
+                .frame(height: 1)
+                .padding(.leading, 48)
+            }
           }
         }
+        .padding(.top, 14)
       }
-      .padding(.top, 14)
     }
     .padding(.vertical, 28)
   }
@@ -721,6 +746,12 @@ struct RookDashboardView: View {
       guard let count = counts[definition.name] else { return nil }
       return count == 1 ? definition.name : "\(count)× \(definition.name)"
     }.joined(separator: " · ")
+  }
+
+  private func codexTaskDetail(_ run: RookPawnRun) -> String {
+    let workspace = run.workspaceName.map { "Checkout: \($0)" } ?? "Verified project checkout"
+    guard let taskID = run.taskID else { return workspace }
+    return "\(workspace) · Task \(taskID)"
   }
 
   private func runTime(_ date: Date) -> String {
@@ -840,7 +871,7 @@ struct RookDashboardView: View {
       }
       .padding(.horizontal, 16)
       .frame(height: 42)
-      .background(RookPalette.paperBright)
+      .rookGlassInset(cornerRadius: 0, tintOpacity: 0.025)
       .overlay(alignment: .bottom) {
         Rectangle().fill(RookPalette.line).frame(height: 1)
       }
@@ -910,7 +941,7 @@ struct RookDashboardView: View {
         }
       }
     }
-    .background(RookPalette.paperBright)
+    .rookGlassPlane(tintOpacity: 0.025)
   }
 
   private func libraryRow(_ entry: RookLibraryEntry) -> some View {
@@ -1453,7 +1484,8 @@ struct RookDashboardView: View {
       }
     }
     .frame(minWidth: 680, minHeight: 620)
-    .background(RookPalette.paper)
+    .padding(1)
+    .rookGlassSheet()
   }
 
   private func legacyPawnResult(for inspection: LibraryPawnInspection) -> String {
@@ -1925,7 +1957,7 @@ struct RookDashboardView: View {
         Spacer(minLength: 6)
         if let provider = connection.oauthProvider {
           Button(oauthActionLabel(provider)) {
-            openOAuthManager(provider)
+            handleOAuthAction(provider)
           }
           .buttonStyle(.plain)
           .font(.system(size: 10.5, weight: .semibold))
@@ -1937,11 +1969,7 @@ struct RookDashboardView: View {
     }
     .padding(20)
     .frame(maxWidth: .infinity, minHeight: 224, alignment: .topLeading)
-    .background(RookPalette.paperBright.opacity(0.74), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    .overlay {
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .stroke(RookPalette.line.opacity(0.9), lineWidth: 1)
-    }
+    .rookGlassCard(cornerRadius: 12, tintOpacity: 0.045, castsShadow: false)
   }
 
   private func plannedConnectionRow(_ connection: RookConnection) -> some View {
@@ -1995,10 +2023,19 @@ struct RookDashboardView: View {
   private func oauthActionLabel(_ provider: RookOAuthProvider) -> String {
     switch model.oauthStatus(for: provider).phase {
     case .notConfigured: return "Set up"
-    case .disconnected, .failed: return "Connect"
+    case .disconnected, .failed: return provider == .spotify ? "Connect Spotify" : "Connect"
     case .connecting: return "Waiting…"
     case .connected: return "Manage"
     }
+  }
+
+  private func handleOAuthAction(_ provider: RookOAuthProvider) {
+    let phase = model.oauthStatus(for: provider).phase
+    if provider == .spotify, phase == .disconnected || phase == .failed {
+      model.connectOAuth(provider)
+      return
+    }
+    openOAuthManager(provider)
   }
 
   private func openOAuthManager(_ provider: RookOAuthProvider) {
@@ -2010,6 +2047,7 @@ struct RookDashboardView: View {
 
   private func oauthSetupSheet(_ provider: RookOAuthProvider) -> some View {
     let status = model.oauthStatus(for: provider)
+    let requiresDeveloperSetup = provider == .google || status.phase == .notConfigured
     return VStack(alignment: .leading, spacing: 0) {
       HStack(alignment: .top) {
         VStack(alignment: .leading, spacing: 9) {
@@ -2037,31 +2075,37 @@ struct RookDashboardView: View {
         .lineSpacing(4)
         .padding(.top, 20)
 
-      VStack(alignment: .leading, spacing: 8) {
-        Text("CLIENT ID")
-          .font(.system(size: 10.5, weight: .bold))
-          .tracking(0.85)
-          .foregroundStyle(RookPalette.muted)
-        TextField(provider == .google ? "…apps.googleusercontent.com" : "Spotify Client ID", text: $oauthClientIDDraft)
+      if requiresDeveloperSetup {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("DEVELOPER CLIENT ID")
+            .font(.system(size: 10.5, weight: .bold))
+            .tracking(0.85)
+            .foregroundStyle(RookPalette.muted)
+          TextField(
+            provider == .google ? "…apps.googleusercontent.com" : "Spotify Client ID",
+            text: $oauthClientIDDraft
+          )
           .textFieldStyle(.plain)
           .font(.system(size: 13, design: .monospaced))
           .foregroundStyle(RookPalette.ink)
           .padding(.horizontal, 13)
           .frame(height: 42)
-          .background(RookPalette.paper, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-          .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-              .stroke(RookPalette.line, lineWidth: 1)
-          }
-        Text(
-          provider == .google
-            ? "Create a Desktop app OAuth client. No client secret is stored."
-            : "Register \(RookOAuthCallback.spotifyRedirectURI) as the redirect URI. No client secret is stored."
-        )
-        .font(.system(size: 11.5))
-        .foregroundStyle(RookPalette.faint)
+          .rookGlassInset(cornerRadius: 7, tintOpacity: 0.025)
+          Text(
+            provider == .google
+              ? "Create a Desktop app OAuth client. No client secret is stored."
+              : "This development build has no Rook Spotify app identity. Register \(RookOAuthCallback.spotifyRedirectURI) as the redirect URI; no client secret is stored."
+          )
+          .font(.system(size: 11.5))
+          .foregroundStyle(RookPalette.faint)
+        }
+        .padding(.top, 22)
+      } else if provider == .spotify {
+        Label("Sign-in opens securely in your browser. OAuth tokens stay in macOS Keychain.", systemImage: "lock.fill")
+          .font(.system(size: 11.5, weight: .medium))
+          .foregroundStyle(RookPalette.faint)
+          .padding(.top, 18)
       }
-      .padding(.top, 22)
 
       if let oauthSetupError {
         Label(oauthSetupError, systemImage: "exclamationmark.triangle.fill")
@@ -2071,16 +2115,18 @@ struct RookDashboardView: View {
       }
 
       HStack(spacing: 12) {
-        Button("Open developer setup") { model.openOAuthSetup(provider) }
-          .buttonStyle(.plain)
-          .font(.system(size: 13, weight: .semibold))
-          .foregroundStyle(RookPalette.accent)
-          .padding(.horizontal, 15)
-          .padding(.vertical, 11)
-          .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-              .stroke(RookPalette.accent.opacity(0.65), lineWidth: 1)
-          }
+        if requiresDeveloperSetup {
+          Button("Open developer setup") { model.openOAuthSetup(provider) }
+            .buttonStyle(.plain)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(RookPalette.accent)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 11)
+            .overlay {
+              RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(RookPalette.accent.opacity(0.65), lineWidth: 1)
+            }
+        }
 
         Spacer()
 
@@ -2090,8 +2136,15 @@ struct RookDashboardView: View {
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(RookPalette.accent)
         } else {
-          Button(status.phase == .connecting ? "Waiting for browser…" : "Save and connect") {
-            saveAndConnectOAuth(provider)
+          Button(
+            status.phase == .connecting
+              ? "Waiting for browser…" : (provider == .spotify ? "Connect Spotify" : "Save and connect")
+          ) {
+            if requiresDeveloperSetup {
+              saveAndConnectOAuth(provider)
+            } else {
+              model.connectOAuth(provider)
+            }
           }
           .buttonStyle(.plain)
           .font(.system(size: 13.5, weight: .semibold))
@@ -2106,7 +2159,7 @@ struct RookDashboardView: View {
     }
     .padding(30)
     .frame(width: 610)
-    .background(RookPalette.paperBright)
+    .rookGlassSheet()
     .confirmationDialog(
       "Disconnect \(provider.displayName) from Rook?",
       isPresented: $confirmOAuthDisconnect,
@@ -2142,7 +2195,7 @@ struct RookDashboardView: View {
     }
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(color.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    .rookGlassInset(cornerRadius: 8, tint: color, tintOpacity: 0.05)
   }
 
   private func oauthStatusTitle(_ status: RookOAuthConnectionStatus) -> String {
@@ -2160,7 +2213,7 @@ struct RookDashboardView: View {
   }
 
   private var spotifyOAuthExplanation: String {
-    "Spotify sign-in powers direct playlist and catalog playback, recent listening, top items, now-playing state, devices, and playback transfer without Codex or pawns. Basic Mac playback continues to work without OAuth. Spotify Development Mode currently requires the app owner to have Premium."
+    "Connect Spotify once to give Rook direct playlist and catalog playback, recent listening, top items, now-playing state, devices, and playback transfer without Codex or pawns. Basic Mac playback continues to work without a Spotify connection."
   }
 
   private func saveAndConnectOAuth(_ provider: RookOAuthProvider) {
@@ -2461,12 +2514,11 @@ struct RookDashboardView: View {
     }
     .padding(.horizontal, 34)
     .frame(height: 104)
-    .background(RookPalette.paperBright, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    .rookGlassCard(cornerRadius: 18, tintOpacity: 0, interactive: true)
     .overlay {
       RoundedRectangle(cornerRadius: 18, style: .continuous)
-        .stroke(commandFocused ? RookPalette.accent : RookPalette.line, lineWidth: commandFocused ? 1.5 : 1)
+        .stroke(commandFocused ? RookPalette.accent : .clear, lineWidth: commandFocused ? 1.5 : 1)
     }
-    .shadow(color: RookPalette.ink.opacity(0.10), radius: 18, x: 0, y: 8)
     .animation(.easeOut(duration: 0.16), value: commandFocused)
   }
 
@@ -2506,7 +2558,7 @@ struct RookDashboardView: View {
         }
       }
       .padding(18)
-      .background(RookPalette.paper, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+      .rookGlassInset(cornerRadius: 10, tintOpacity: 0.03)
 
       Label("Reviewing alone does not execute, send, publish, or change anything.", systemImage: "hand.raised.fill")
         .font(.system(size: 13, weight: .medium))
@@ -2523,7 +2575,7 @@ struct RookDashboardView: View {
     }
     .padding(32)
     .frame(width: 560)
-    .background(RookPalette.paperBright)
+    .rookGlassSheet()
   }
 
   private func submitTypedCommand() {

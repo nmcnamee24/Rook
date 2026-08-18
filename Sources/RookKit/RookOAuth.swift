@@ -77,6 +77,17 @@ public struct RookOAuthClientConfiguration: Codable, Equatable, Sendable {
     }
   }
 
+  /// Keeps an explicitly saved developer override while allowing a release
+  /// build to supply Rook-owned public client IDs from its app bundle.
+  public func resolvingFallback(_ fallback: RookOAuthClientConfiguration) -> RookOAuthClientConfiguration {
+    RookOAuthClientConfiguration(
+      googleClientID: clientID(for: .google).isEmpty
+        ? fallback.clientID(for: .google) : clientID(for: .google),
+      spotifyClientID: clientID(for: .spotify).isEmpty
+        ? fallback.clientID(for: .spotify) : clientID(for: .spotify)
+    )
+  }
+
   public func validationError(for provider: RookOAuthProvider) -> String? {
     let clientID = clientID(for: provider)
     guard !clientID.isEmpty else { return "A client ID is required." }

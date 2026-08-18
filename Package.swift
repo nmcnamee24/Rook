@@ -6,7 +6,23 @@ let package = Package(
   platforms: [.macOS(.v26)],
   products: [
     .executable(name: "RookCore", targets: ["RookCore"]),
+    .executable(name: "RookWakeRecorder", targets: ["RookWakeRecorder"]),
+    .executable(name: "RookWakeTool", targets: ["RookWakeTool"]),
     .library(name: "RookKit", targets: ["RookKit"]),
+  ],
+  dependencies: [
+    .package(
+      url: "https://github.com/livekit/livekit-wakeword",
+      revision: "95448a7559c453fcd87645bd67b247ffb45f85b0"
+    ),
+    .package(
+      url: "https://github.com/microsoft/onnxruntime-swift-package-manager",
+      exact: "1.24.2"
+    ),
+    .package(
+      url: "https://github.com/FluidInference/FluidAudio.git",
+      exact: "0.15.3"
+    ),
   ],
   targets: [
     .target(
@@ -19,7 +35,10 @@ let package = Package(
     ),
     .executableTarget(
       name: "RookCore",
-      dependencies: ["RookKit"],
+      dependencies: [
+        "RookKit",
+        .product(name: "FluidAudio", package: "FluidAudio"),
+      ],
       linkerSettings: [
         .linkedFramework("AppKit"),
         .linkedFramework("AVFoundation"),
@@ -34,6 +53,20 @@ let package = Package(
         .linkedFramework("Speech"),
         .linkedFramework("SwiftUI"),
         .linkedFramework("UserNotifications"),
+      ]
+    ),
+    .executableTarget(
+      name: "RookWakeRecorder",
+      linkerSettings: [
+        .linkedFramework("AVFoundation")
+      ]
+    ),
+    .executableTarget(
+      name: "RookWakeTool",
+      dependencies: [
+        "RookKit",
+        .product(name: "LiveKitWakeWord", package: "livekit-wakeword"),
+        .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),
       ]
     ),
     .testTarget(

@@ -9,20 +9,25 @@ final class RookOAuthCoordinator {
   var onStatus: StatusHandler?
 
   private let configurationStore: RookOAuthConfigurationStore
+  private let bundledConfiguration: RookOAuthClientConfiguration
   private let keychain = RookOAuthKeychain()
   private var servers: [RookOAuthProvider: RookOAuthLoopbackServer] = [:]
   private var redirectURLs: [RookOAuthProvider: URL] = [:]
 
-  init(config: RookConfig) {
+  init(config: RookConfig, bundle: Bundle = .main) {
     configurationStore = RookOAuthConfigurationStore(url: config.connectionsConfigURL)
+    bundledConfiguration = RookOAuthClientConfiguration(
+      googleClientID: bundle.object(forInfoDictionaryKey: "RookGoogleClientID") as? String ?? "",
+      spotifyClientID: bundle.object(forInfoDictionaryKey: "RookSpotifyClientID") as? String ?? ""
+    )
   }
 
   func configuration() -> RookOAuthClientConfiguration {
-    configurationStore.load()
+    resolvedConfiguration()
   }
 
   func initialStatuses() -> [RookOAuthProvider: RookOAuthConnectionStatus] {
-    let configuration = configurationStore.load()
+    let configuration = resolvedConfiguration()
     return Dictionary(
       uniqueKeysWithValues: RookOAuthProvider.allCases.map { provider in
         let status: RookOAuthConnectionStatus
@@ -54,7 +59,7 @@ final class RookOAuthCoordinator {
   }
 
   func saveClientID(_ clientID: String, for provider: RookOAuthProvider) throws {
-    let oldID = configurationStore.load().clientID(for: provider)
+    let oldID = resolvedConfiguration().clientID(for: provider)
     try configurationStore.saveClientID(clientID, for: provider)
     if !oldID.isEmpty, oldID != clientID.trimmingCharacters(in: .whitespacesAndNewlines) {
       try keychain.delete(provider)
@@ -64,7 +69,7 @@ final class RookOAuthCoordinator {
 
   func connect(_ provider: RookOAuthProvider) {
     guard servers[provider] == nil else { return }
-    let configuration = configurationStore.load()
+    let configuration = resolvedConfiguration()
     if let validationError = configuration.validationError(for: provider) {
       emit(
         RookOAuthConnectionStatus(
@@ -174,7 +179,7 @@ final class RookOAuthCoordinator {
       throw RookOAuthError.authorization("\(provider.displayName) needs to be connected again.")
     }
 
-    let configuration = configurationStore.load()
+    let configuration = resolvedConfiguration()
     let clientID = configuration.clientID(for: provider)
     guard configuration.validationError(for: provider) == nil else {
       throw RookOAuthError.configuration("The \(provider.displayName) client ID is missing or invalid.")
@@ -254,6 +259,10 @@ final class RookOAuthCoordinator {
     } catch {
       fail(provider, error.localizedDescription)
     }
+  }
+
+  private func resolvedConfiguration() -> RookOAuthClientConfiguration {
+    configurationStore.load().resolvingFallback(bundledConfiguration)
   }
 
   private func authorizationURL(

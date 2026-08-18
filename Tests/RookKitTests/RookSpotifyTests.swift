@@ -360,6 +360,53 @@ final class RookSpotifyTests: XCTestCase {
       ["/v1/me/top/tracks", "/v1/me/player/devices", "/v1/me/player/play"]
     )
   }
+
+  @MainActor
+  func testTaskPlaybackReturnsVerifiedTrackEvidenceWithoutRepeatingTheMutation() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [SpotifyURLProtocol.self]
+    let session = URLSession(configuration: configuration)
+    SpotifyURLProtocol.reset()
+    var playerReads = 0
+    SpotifyURLProtocol.handler = { request in
+      switch (request.httpMethod, request.url?.path) {
+      case ("GET", "/v1/me/playlists"):
+        let json =
+          #"{"total":1,"items":[{"id":"focus","name":"Deep Focus","uri":"spotify:playlist:focus","type":"playlist","owner":{"display_name":"Noah"},"images":[],"external_urls":{"spotify":"https://open.spotify.com/playlist/focus"}}]}"#
+        return (200, Data(json.utf8))
+      case ("GET", "/v1/me/player/devices"):
+        let json =
+          #"{"devices":[{"id":"mac","is_active":true,"is_restricted":false,"name":"Noah's MacBook","type":"computer"}]}"#
+        return (200, Data(json.utf8))
+      case ("PUT", "/v1/me/player/play"):
+        return (204, Data())
+      case ("GET", "/v1/me/player"):
+        playerReads += 1
+        if playerReads == 1 {
+          let stale =
+            #"{"device":{"id":"mac","is_active":true,"is_restricted":false,"name":"Noah's MacBook","type":"computer"},"is_playing":true,"context":{"uri":"spotify:playlist:old"},"item":{"id":"old-track","name":"Old Song","uri":"spotify:track:old","type":"track","artists":[{"name":"Earlier Artist"}],"album":{"images":[]},"external_urls":{"spotify":"https://open.spotify.com/track/old"}}}"#
+          return (200, Data(stale.utf8))
+        }
+        let json =
+          #"{"device":{"id":"mac","is_active":true,"is_restricted":false,"name":"Noah's MacBook","type":"computer"},"is_playing":true,"context":{"uri":"spotify:playlist:focus"},"item":{"id":"track-1","name":"First Light","uri":"spotify:track:1","type":"track","artists":[{"name":"Northstar"}],"album":{"images":[]},"external_urls":{"spotify":"https://open.spotify.com/track/1"}}}"#
+        return (200, Data(json.utf8))
+      default:
+        return (404, Data())
+      }
+    }
+
+    let client = RookSpotifyClient(session: session) { "test-access-token" }
+    let result = try await client.executeForTask(.playAnyPlaylist)
+
+    XCTAssertTrue(result.verified)
+    XCTAssertEqual(result.evidence?.values["track"], "First Light")
+    XCTAssertEqual(result.evidence?.values["artist"], "Northstar")
+    XCTAssertEqual(playerReads, 2)
+    XCTAssertEqual(
+      SpotifyURLProtocol.recordedRequests.filter { $0.httpMethod == "PUT" }.count,
+      1
+    )
+  }
 }
 
 private final class SpotifyURLProtocol: URLProtocol, @unchecked Sendable {

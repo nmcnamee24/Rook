@@ -5,10 +5,11 @@ Rook Mobile is a native SwiftUI iPhone companion. It keeps the existing Mac app 
 ## Implemented connection
 
 - Native iOS 26 target in `RookMobile.xcodeproj`.
-- A four-surface iPhone command center: Home, Activity, Library, and Moves.
-- Home keeps the latest answer, Canvas, live work, quick asks, typed input, and push-to-talk in one thumb-friendly flow.
-- Activity exposes live and recent task crews with attributable pawn assignments and status, without hidden reasoning or raw pawn messages.
-- Searchable Library outcomes and a pending/recorded Moves queue with human-readable labels.
+- A four-surface iPhone companion: Rook, Activity, Library, and Moves.
+- Rook centers the latest answer and one adaptive typed/voice composer; live work, Canvas, and pending decisions appear only when they are relevant.
+- Activity uses a native grouped list for live and recent task crews with attributable pawn status, without hidden reasoning or raw pawn messages.
+- Searchable Library outcomes and a pending/recorded Moves queue use standard iOS navigation, lists, forms, badges, and controls.
+- Semantic system colors, materials, SF Symbols, Dynamic Type, and light/dark appearance let iOS provide native contrast and visual hierarchy.
 - Settings shows the encrypted Mac link and sanitized Gmail, Calendar, and Spotify Ally availability; account management and credentials stay on the Mac.
 - Shared `RookResponse`, Canvas, pawn, and queue-label contracts.
 - Foreground push-to-talk using Apple's on-device `SpeechAnalyzer` and `SpeechTranscriber` path.

@@ -88,6 +88,13 @@ public enum RookComputerCommandParser {
     }
 
     if let captures = captures(
+      #"^(?:please\s+)?(?:open|launch|start)\s+(safari|google\s+chrome|chrome|firefox|arc)(?:\s+and)?\s+(?:open|go\s+to|visit)\s+(https?://\S+|[a-z0-9][a-z0-9.-]+\.[a-z]{2,}(?:/\S*)?)(?:\s+please)?$"#,
+      in: command
+    ), let browser = browser(named: captures[0]), isSafeWebAddress(captures[1]) {
+      return .openWebAddress(browser: browser, address: captures[1])
+    }
+
+    if let captures = captures(
       #"^(?:please\s+)?(?:open|go\s+to|visit)\s+(https?://\S+|[a-z0-9][a-z0-9.-]+\.[a-z]{2,}(?:/\S*)?)(?:\s+(?:in|on|using|with)\s+(safari|google\s+chrome|chrome|firefox|arc))?(?:\s+please)?$"#,
       in: command
     ) {

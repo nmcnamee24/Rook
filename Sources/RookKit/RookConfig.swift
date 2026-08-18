@@ -4,6 +4,12 @@ public struct RookConfig: Codable, Equatable, Sendable {
   public static let pawnCapacityPerPrompt = 10
 
   public var wakePhrase: String
+  public var wakeEngine: String
+  public var wakeHelperPath: String
+  public var wakeModelPath: String
+  public var wakeOperatingPoint: Int
+  public var wakePreRollMilliseconds: Int
+  public var wakeFallbackToApple: Bool
   public var language: String
   public var onDeviceOnly: Bool
   public var silenceSeconds: Double
@@ -29,6 +35,12 @@ public struct RookConfig: Codable, Equatable, Sendable {
 
   enum CodingKeys: String, CodingKey {
     case wakePhrase = "wake_phrase"
+    case wakeEngine = "wake_engine"
+    case wakeHelperPath = "wake_helper_path"
+    case wakeModelPath = "wake_model_path"
+    case wakeOperatingPoint = "wake_operating_point"
+    case wakePreRollMilliseconds = "wake_pre_roll_milliseconds"
+    case wakeFallbackToApple = "wake_fallback_to_apple"
     case language
     case onDeviceOnly = "on_device_only"
     case silenceSeconds = "silence_seconds"
@@ -55,6 +67,12 @@ public struct RookConfig: Codable, Equatable, Sendable {
 
   public init(
     wakePhrase: String,
+    wakeEngine: String = "livekit",
+    wakeHelperPath: String = "",
+    wakeModelPath: String = "",
+    wakeOperatingPoint: Int = 68,
+    wakePreRollMilliseconds: Int = 1_200,
+    wakeFallbackToApple: Bool = true,
     language: String,
     onDeviceOnly: Bool,
     silenceSeconds: Double,
@@ -79,6 +97,12 @@ public struct RookConfig: Codable, Equatable, Sendable {
     mobileRelayURL: String = ""
   ) {
     self.wakePhrase = wakePhrase
+    self.wakeEngine = wakeEngine
+    self.wakeHelperPath = wakeHelperPath
+    self.wakeModelPath = wakeModelPath
+    self.wakeOperatingPoint = wakeOperatingPoint
+    self.wakePreRollMilliseconds = wakePreRollMilliseconds
+    self.wakeFallbackToApple = wakeFallbackToApple
     self.language = language
     self.onDeviceOnly = onDeviceOnly
     self.silenceSeconds = silenceSeconds
@@ -107,6 +131,15 @@ public struct RookConfig: Codable, Equatable, Sendable {
     let defaults = Self.recommended
     let container = try decoder.container(keyedBy: CodingKeys.self)
     wakePhrase = try container.decodeIfPresent(String.self, forKey: .wakePhrase) ?? defaults.wakePhrase
+    wakeEngine = try container.decodeIfPresent(String.self, forKey: .wakeEngine) ?? defaults.wakeEngine
+    wakeHelperPath = try container.decodeIfPresent(String.self, forKey: .wakeHelperPath) ?? defaults.wakeHelperPath
+    wakeModelPath = try container.decodeIfPresent(String.self, forKey: .wakeModelPath) ?? defaults.wakeModelPath
+    wakeOperatingPoint =
+      try container.decodeIfPresent(Int.self, forKey: .wakeOperatingPoint) ?? defaults.wakeOperatingPoint
+    wakePreRollMilliseconds =
+      try container.decodeIfPresent(Int.self, forKey: .wakePreRollMilliseconds) ?? defaults.wakePreRollMilliseconds
+    wakeFallbackToApple =
+      try container.decodeIfPresent(Bool.self, forKey: .wakeFallbackToApple) ?? defaults.wakeFallbackToApple
     language = try container.decodeIfPresent(String.self, forKey: .language) ?? defaults.language
     onDeviceOnly = try container.decodeIfPresent(Bool.self, forKey: .onDeviceOnly) ?? defaults.onDeviceOnly
     silenceSeconds = try container.decodeIfPresent(Double.self, forKey: .silenceSeconds) ?? defaults.silenceSeconds
@@ -141,7 +174,13 @@ public struct RookConfig: Codable, Equatable, Sendable {
   public static var recommended: RookConfig {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     return RookConfig(
-      wakePhrase: "rook wake up",
+      wakePhrase: "Rook",
+      wakeEngine: "livekit",
+      wakeHelperPath: "\(home)/.codex/rook/wake/rook-livekit-wake",
+      wakeModelPath: "\(home)/.codex/rook/wake/rook.onnx",
+      wakeOperatingPoint: 68,
+      wakePreRollMilliseconds: 1_200,
+      wakeFallbackToApple: true,
       language: "en-US",
       onDeviceOnly: true,
       silenceSeconds: 1.4,
@@ -172,6 +211,16 @@ public struct RookConfig: Codable, Equatable, Sendable {
   }
 
   public var rookWorkspaceURL: URL { stateURL.deletingLastPathComponent() }
+  public var wakeDirectoryURL: URL { rookWorkspaceURL.appendingPathComponent("wake", isDirectory: true) }
+  public var wakeHelperURL: URL {
+    URL(fileURLWithPath: NSString(string: wakeHelperPath).expandingTildeInPath)
+  }
+  public var wakeModelURL: URL {
+    URL(fileURLWithPath: NSString(string: wakeModelPath).expandingTildeInPath)
+  }
+  public var wakeValidationURL: URL {
+    wakeModelURL.deletingLastPathComponent().appendingPathComponent("rook.validation.json")
+  }
   public var actionQueueURL: URL { rookWorkspaceURL.appendingPathComponent("action_queue.json") }
   public var configURL: URL { stateURL.appendingPathComponent("config.json") }
   public var schemaURL: URL { stateURL.appendingPathComponent("response_schema.json") }
@@ -187,6 +236,9 @@ public struct RookConfig: Codable, Equatable, Sendable {
   public var promptPolishLogURL: URL { stateURL.appendingPathComponent("prompt_polish.log") }
   public var statusURL: URL { stateURL.appendingPathComponent("status.json") }
   public var weatherCacheURL: URL { stateURL.appendingPathComponent("weather_cache.json") }
+  public var tracesURL: URL { stateURL.appendingPathComponent("traces", isDirectory: true) }
+  public var codingTasksURL: URL { stateURL.appendingPathComponent("coding_tasks", isDirectory: true) }
+  public var benchmarkBaselinesURL: URL { stateURL.appendingPathComponent("manual_baselines.json") }
   public var mediaURL: URL { rookWorkspaceURL.appendingPathComponent("media", isDirectory: true) }
   public var codexSessionsURL: URL {
     FileManager.default.homeDirectoryForCurrentUser
@@ -226,6 +278,22 @@ public struct RookConfig: Codable, Equatable, Sendable {
     maxPawns = Self.pawnCapacityPerPrompt
     checkpointIntervalMinutes = max(5, checkpointIntervalMinutes)
     promptPolishWaitMilliseconds = min(max(200, promptPolishWaitMilliseconds), 3_000)
+    let previousWakeEngine = wakeEngine.lowercased()
+    wakeEngine = previousWakeEngine == "apple" ? "apple" : "livekit"
+    if previousWakeEngine == "sensory" {
+      let defaults = Self.recommended
+      if wakeHelperPath.isEmpty || wakeHelperPath.hasSuffix("/rook-sensory-wake") {
+        wakeHelperPath = defaults.wakeHelperPath
+      }
+      if wakeModelPath.isEmpty || wakeModelPath.hasSuffix("/rook.snsr") {
+        wakeModelPath = defaults.wakeModelPath
+      }
+      if wakeOperatingPoint == 0 {
+        wakeOperatingPoint = defaults.wakeOperatingPoint
+      }
+    }
+    wakeOperatingPoint = min(max(1, wakeOperatingPoint), 99)
+    wakePreRollMilliseconds = min(max(500, wakePreRollMilliseconds), 3_000)
   }
 
   public static func loadOrCreate() throws -> RookConfig {
@@ -266,11 +334,29 @@ public struct RookConfig: Codable, Equatable, Sendable {
     )
     try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: stateURL.path)
     try FileManager.default.createDirectory(
+      at: wakeDirectoryURL,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: wakeDirectoryURL.path)
+    try FileManager.default.createDirectory(
       at: mediaURL,
       withIntermediateDirectories: true,
       attributes: [.posixPermissions: 0o700]
     )
     try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: mediaURL.path)
+    try FileManager.default.createDirectory(
+      at: tracesURL,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: tracesURL.path)
+    try FileManager.default.createDirectory(
+      at: codingTasksURL,
+      withIntermediateDirectories: true,
+      attributes: [.posixPermissions: 0o700]
+    )
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: codingTasksURL.path)
   }
 
   public func ensureSchema() throws {

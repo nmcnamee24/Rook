@@ -4,6 +4,83 @@ All notable Rook changes are documented here. Versions follow the app bundle's s
 
 ## [Unreleased]
 
+### Added
+
+- Added a strict fast-path readiness report with per-scenario live sample counts, stable-intent-to-adapter latency, retry-aware and verified first-attempt success, forbidden-fallback detection, manual baselines, and explicit attention-advantage evidence.
+- Added a one-action live benchmark runner for the reviewed Spotify, Safari, app-launch, and Reflex scenarios; every run writes the same private monotonic trace as the app and never loops external actions.
+- Added side-effect-free streaming prewarm for stable Reflex calculations and conversions. Prepared results remain private and are discarded unless the final transcript resolves to the exact same intent.
+- Added explicit adapter, retry, effect, and verification contracts for every direct capability so non-Spotify dependent work has inspectable ownership without expanding the exact gate.
+- Added an explicit SHA-bound local wake trial mode so the owner can run a trained candidate immediately without representing it as corpus-validated.
+- Added a Central-selected full Codex coding handoff that creates one saved non-ephemeral Codex task in the verified project checkout, inherits the user's normal Codex configuration, and persists its thread ID and outcome privately.
+- Added Codex-task progress and completion records to the shared Activity surface, with restart recovery and a CLI handoff diagnostic.
+
+### Changed
+
+- Replaced ordinary Spotify Client ID setup with a one-button **Connect Spotify** flow that resolves a bundled public Rook app identity or an existing private developer override, while preserving PKCE, state validation, loopback callback, and Keychain-only tokens.
+- Direct Spotify mutations now use the verified task adapter instead of treating provider acceptance alone as completion; Safari destinations and app launches also return bounded native verification receipts.
+- Made trace summaries distinguish retries and unverified outcomes instead of counting every eventual success as first-attempt success.
+- Replaced the eager keyword router with a thin exact fast-path gate and a prewarmed structured Central Rook delegator that answers, clarifies, or starts deep work from the complete request.
+- Made pawn selection a Central Rook decision instead of a deterministic keyword guess; semantic, compound, unsupported, and declined requests now remain intact through delegation.
+- Retained the ordered Spotify hybrid planner only for safely resuming already-open dependent workflows.
+- Renamed the macOS Pawns surface to Activity so one work view can distinguish full Codex coding tasks from silent pawn crews without treating Codex as another pawn.
+
+## [2.27] - 2026-08-13
+
+### Added
+
+- Added a pinned Apache-2.0 LiveKit WakeWord Swift/ONNX runtime and isolated local `RookWakeTool` process with no account, cloud call, access key, or runtime fee.
+- Added Rook-owned production and bootstrap training configurations, private training/corpus recorders, hard-negative generation, and exact candidate promotion tooling.
+- Added a SHA-256-bound validation manifest and runtime probe; an untested, replaced, missing, or unloadable model cannot become authoritative.
+
+### Changed
+
+- Replaced the proprietary Sensory integration with an ownable ONNX classifier path while preserving the continuous Apple command transcript and explicit Apple fallback.
+- Raised model promotion from an advisory benchmark to an enforced release gate covering six positive profiles and 24 hours of negative audio.
+
+## [2.26] - 2026-08-13
+
+### Added
+
+- Added a dedicated local Sensory TrulyNatural wake-word bridge for a four-utterance personalized “Rook” model, with Apple recognition retained for continuous command transcription.
+- Added an in-memory 1.2-second audio pre-roll, adaptive room-noise voice activity, direct no-pause command extraction, bounded helper restart, and explicit Apple fallback diagnostics.
+- Added private interactive enrollment and deterministic corpus evaluation tooling for quiet, whisper, continuous-command, office-noise, coffee-shop-noise, far-field, and negative audio.
+
+### Changed
+
+- Made the personalized acoustic detector authoritative whenever its local helper and model are ready; Apple wake matching is now a compatibility fallback, not the claimed final wake path.
+- Replaced the fixed command endpoint amplitude threshold with an adaptive threshold learned from the current room floor.
+
+## [2.25] - 2026-08-13
+
+### Added
+
+- Added a native dependency-aware task executor with explicit pending, running, succeeded, failed, blocked, and skipped step states.
+- Added verified Spotify task receipts containing only bounded track, artist, device, and playback-state facts for dependent research.
+- Added planner-to-adapter regression coverage for successful execution, clarification, dependency failure, safe read retry, and mutation non-retry behavior.
+- Added hybrid Spotify continuation state so a playlist clarification resumes the complete playback, inspection, and research request.
+
+### Changed
+
+- Hybrid Spotify requests now execute and verify playback and now-playing steps before the Scout research step begins.
+- Playback verification rejects stale pre-command player state by matching the requested track or Spotify context and retries only the read-only state check once.
+- Completed native steps are supplied to central Rook as trusted receipts and are not repeated through Codex or Computer Use.
+- Natural `play a playlist` wording now selects an available personal playlist rather than manufacturing an unnecessary generic-model detour.
+
+## [2.24] - 2026-08-13
+
+### Added
+
+- Added private monotonic request traces from wake or typed submission through intent, route, adapter, outcome, verification, failure classification, recovery recommendation, and completion.
+- Added a deterministic P0 routing benchmark, manual-baseline storage, and recent trace summaries for first-attempt success and outcome latency.
+- Added explicit dependency edges to hybrid plans and regression coverage for the Spotify playback, now-playing inspection, and artist-research sequence.
+- Added bounded failure categories and recovery recommendations that distinguish ambiguity, setup, timeout, provider, policy, dependency, execution, and verification failures.
+
+### Changed
+
+- Kept Spotify playback and now-playing ownership on the direct Spotify capability inside mixed research requests instead of assigning those steps to Computer Operator.
+- Routed `Open Safari and go to <address>` through the narrow native browser controller.
+- Documented the task deliberator contract and restricted outcome-based learning to reviewed, versioned routing rules with regression tests.
+
 ### Documentation
 
 - Added a development log for product-critical latency, wake-word, transcription, routing, and Codex-equivalence gaps, including measurable acceptance criteria and the repository stabilization order.

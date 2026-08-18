@@ -51,11 +51,7 @@ private struct RookCanvasBlockView: View {
           .frame(height: 38)
       }
     }
-    .background(RookPalette.paperBright, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    .overlay {
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .stroke(RookPalette.line.opacity(0.88), lineWidth: 1)
-    }
+    .rookGlassCard(cornerRadius: 12, tintOpacity: 0.045, castsShadow: false)
   }
 
   private var canvasHeader: some View {

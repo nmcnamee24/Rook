@@ -186,9 +186,31 @@ final class WakePhraseTests: XCTestCase {
     XCTAssertEqual(decoded.neuralVoice, "bm_daniel")
     XCTAssertEqual(decoded.neuralVoiceSpeed, 0.96)
     XCTAssertEqual(decoded.wakePhrase, "Rook")
+    XCTAssertEqual(decoded.wakeEngine, "livekit")
+    XCTAssertTrue(decoded.wakeHelperPath.hasSuffix("/.codex/rook/wake/rook-livekit-wake"))
+    XCTAssertTrue(decoded.wakeModelPath.hasSuffix("/.codex/rook/wake/rook.onnx"))
+    XCTAssertEqual(decoded.wakeOperatingPoint, 68)
+    XCTAssertEqual(decoded.wakePreRollMilliseconds, 1_200)
+    XCTAssertTrue(decoded.wakeFallbackToApple)
     XCTAssertEqual(decoded.mobileRelayURL, "")
     XCTAssertEqual(decoded.normalizedEnabledPawns, PawnDefinition.defaultNames)
     XCTAssertEqual(decoded.effectiveMaxPawns, RookConfig.pawnCapacityPerPrompt)
+  }
+
+  func testSensoryConfigMigratesToOwnedLiveKitPaths() {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    var config = RookConfig.recommended
+    config.wakeEngine = "sensory"
+    config.wakeHelperPath = "\(home)/.codex/rook/wake/rook-sensory-wake"
+    config.wakeModelPath = "\(home)/.codex/rook/wake/rook.snsr"
+    config.wakeOperatingPoint = 0
+
+    config.normalizePawnSettings()
+
+    XCTAssertEqual(config.wakeEngine, "livekit")
+    XCTAssertEqual(config.wakeHelperPath, "\(home)/.codex/rook/wake/rook-livekit-wake")
+    XCTAssertEqual(config.wakeModelPath, "\(home)/.codex/rook/wake/rook.onnx")
+    XCTAssertEqual(config.wakeOperatingPoint, 68)
   }
 
   func testPawnRolesCannotBeDisabledAndCapacityMigratesToPerPromptCrew() {
@@ -286,6 +308,12 @@ final class WakePhraseTests: XCTestCase {
     XCTAssertTrue(RookResponse.outputSchema.contains(#""id""#))
     XCTAssertTrue(RookResponse.outputSchema.contains(#""result""#))
     XCTAssertTrue(RookResponse.outputSchema.contains(#""evidence""#))
+  }
+
+  func testCentralDelegatorUsesTheQuickStructuredResponseContract() {
+    XCTAssertNotNil(RookStreamingPurpose.centralDelegation.outputSchema)
+    XCTAssertNil(RookStreamingPurpose.answer.outputSchema)
+    XCTAssertTrue(QuickRookResponse.outputSchema.contains("clarification"))
   }
 
   func testCanvasSchemasAreValidAndAdvertiseRichRenderers() throws {
@@ -528,7 +556,7 @@ final class WakePhraseTests: XCTestCase {
     ] {
       let decision = LocalRookRouter.route(command)
       XCTAssertEqual(decision.destination, .deliberate)
-      XCTAssertTrue(decision.response.pawns.contains { $0.pawn == "Scout" })
+      XCTAssertTrue(decision.response.pawns.isEmpty)
     }
   }
 
@@ -573,47 +601,36 @@ final class WakePhraseTests: XCTestCase {
     XCTAssertTrue(hearing.response.pawns.isEmpty)
   }
 
-  func testLocalRouterStreamsStableOrdinaryQuestions() {
+  func testLocalRouterHandsStableOrdinaryQuestionsToCentralRook() {
     let decision = LocalRookRouter.route("Why is the sky blue?")
 
-    XCTAssertEqual(decision.destination, .stream)
-    XCTAssertEqual(decision.response.displayText, "Thinking…")
+    XCTAssertEqual(decision.destination, .deliberate)
+    XCTAssertTrue(decision.response.displayText.contains("Central Rook"))
     XCTAssertTrue(decision.response.pawns.isEmpty)
   }
 
-  func testLocalRouterSendsLivePersonalWorkDirectlyToAPawnCrew() {
+  func testLocalRouterDoesNotGuessAPawnCrewForPersonalWork() {
     let decision = LocalRookRouter.route(
       "Make a work block from my calendar, and create a document, and verify there are no conflicts."
     )
-    let roles = Set(decision.response.pawns.map(\.pawn))
-
     XCTAssertEqual(decision.destination, .deliberate)
-    XCTAssertTrue(roles.contains("Steward"))
-    XCTAssertTrue(roles.contains("Scribe"))
-    XCTAssertTrue(roles.contains("Auditor"))
+    XCTAssertTrue(decision.response.pawns.isEmpty)
   }
 
-  func testLocalRouterCanDeployRepeatedRoleInstances() {
+  func testLocalRouterDoesNotInferRepeatedRolesFromConjunctions() {
     let decision = LocalRookRouter.route(
       "Check my calendar and then move my hike, and check my email and then draft a reply."
     )
-    let stewards = decision.response.pawns.filter { $0.pawn == "Steward" }
-
     XCTAssertEqual(decision.destination, .deliberate)
-    XCTAssertGreaterThanOrEqual(stewards.count, 2)
-    XCTAssertEqual(Set(stewards.compactMap(\.id)).count, stewards.count)
-    XCTAssertEqual(Array(stewards.prefix(2)).map(\.id), ["steward_1", "steward_2"])
+    XCTAssertTrue(decision.response.pawns.isEmpty)
   }
 
-  func testLocalRouterSendsPriorPawnAndBugFollowUpsToDeepRook() {
+  func testLocalRouterPreservesPriorPawnAndBugFollowUpsForCentralRook() {
     let decision = LocalRookRouter.route(
       "I was talking about the link opening bug that Forge and Auditor said was interrupted and blocked."
     )
-    let roles = Set(decision.response.pawns.map(\.pawn))
-
     XCTAssertEqual(decision.destination, .deliberate)
-    XCTAssertTrue(roles.contains("Forge"))
-    XCTAssertTrue(roles.contains("Auditor"))
+    XCTAssertTrue(decision.response.pawns.isEmpty)
   }
 
   func testBackgroundConnectorPolicyAllowsGuardedCalendarCreateUpdateAndGmailDraftWrites() {
@@ -653,7 +670,7 @@ final class WakePhraseTests: XCTestCase {
     let decision = LocalRookRouter.route("Why was the previous Forge task interrupted?")
     XCTAssertEqual(decision.destination, .deliberate)
     XCTAssertFalse(decision.response.pawns.contains { $0.pawn == "Librarian" })
-    XCTAssertTrue(decision.response.pawns.contains { $0.pawn == "Scout" })
+    XCTAssertTrue(decision.response.pawns.isEmpty)
     XCTAssertLessThanOrEqual(decision.response.pawns.count, RookConfig.pawnCapacityPerPrompt)
   }
 

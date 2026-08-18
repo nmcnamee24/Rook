@@ -10,17 +10,20 @@ public struct RookHybridPlanStep: Equatable, Sendable {
   public let clause: String
   public let capabilities: [RookDirectCapabilityID]
   public let owner: RookHybridStepOwner
+  public let dependsOn: [Int]
 
   public init(
     order: Int,
     clause: String,
     capabilities: [RookDirectCapabilityID],
-    owner: RookHybridStepOwner
+    owner: RookHybridStepOwner,
+    dependsOn: [Int] = []
   ) {
     self.order = order
     self.clause = clause
     self.capabilities = capabilities
     self.owner = owner
+    self.dependsOn = dependsOn
   }
 }
 
@@ -48,6 +51,13 @@ public struct RookHybridCapabilityPlan: Equatable, Sendable {
     centralCapabilities.contains(.computerControl)
       || centralCapabilities.contains(.screenCapture)
   }
+
+  /// Inspectable ownership contracts for every native capability in this
+  /// plan. Central Rook may use these contracts when it resumes reviewed
+  /// hybrid work, while unsupported execution still remains with Central.
+  public var executionContracts: [RookCapabilityExecutionContract] {
+    centralCapabilities.map(RookDirectCapabilityGuide.executionContract(for:))
+  }
 }
 
 /// Recognizes compound requests that intentionally combine a central-only
@@ -58,7 +68,7 @@ public enum RookHybridCapabilityPlanner {
     let clauses = splitClauses(rawCommand)
     guard clauses.count >= 2 else { return nil }
 
-    let steps = clauses.enumerated().map { index, clause in
+    let preliminary = clauses.enumerated().map { index, clause in
       let capabilities = capabilities(in: clause)
       return RookHybridPlanStep(
         order: index + 1,
@@ -67,10 +77,57 @@ public enum RookHybridCapabilityPlanner {
         owner: capabilities.isEmpty ? .pawnEligible : .central
       )
     }
+    let containsSpotifyOperation = preliminary.contains {
+      $0.capabilities.contains(.spotify) && !isSpotifyLaunchClause($0.clause)
+    }
+    let reassigned = preliminary.map { step in
+      guard containsSpotifyOperation, isSpotifyLaunchClause(step.clause) else { return step }
+      return RookHybridPlanStep(
+        order: step.order,
+        clause: step.clause,
+        capabilities: [.spotify],
+        owner: .central
+      )
+    }
+    let steps = reassigned.map { step in
+      RookHybridPlanStep(
+        order: step.order,
+        clause: step.clause,
+        capabilities: step.capabilities,
+        owner: step.owner,
+        dependsOn: dependencies(for: step, in: reassigned)
+      )
+    }
     guard steps.contains(where: { $0.owner == .central }),
       steps.contains(where: { $0.owner == .pawnEligible })
     else { return nil }
     return RookHybridCapabilityPlan(steps: steps)
+  }
+
+  private static func dependencies(
+    for step: RookHybridPlanStep,
+    in steps: [RookHybridPlanStep]
+  ) -> [Int] {
+    guard step.order > 1 else { return [] }
+    let lower = step.clause.lowercased()
+    let observesPlayback =
+      step.capabilities.contains(.spotify)
+      && containsAny(lower, ["playing", "current song", "current track", "now playing"])
+    let refersToPlaybackResult = containsAny(
+      lower,
+      ["the artist", "the song", "the track", "artist playing", "song playing", "track playing"]
+    )
+    guard observesPlayback || refersToPlaybackResult else { return [] }
+    return steps.reversed().first {
+      $0.order < step.order && $0.capabilities.contains(.spotify)
+    }.map { [$0.order] } ?? []
+  }
+
+  private static func isSpotifyLaunchClause(_ clause: String) -> Bool {
+    let normalized = clause.lowercased()
+      .replacingOccurrences(of: "[^a-z0-9]+", with: " ", options: .regularExpression)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return ["open spotify", "launch spotify", "switch to spotify", "bring up spotify"].contains(normalized)
   }
 
   private static func capabilities(in clause: String) -> [RookDirectCapabilityID] {
@@ -126,5 +183,9 @@ public enum RookHybridCapabilityPlanner {
       .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
     if !remainder.isEmpty { clauses.append(remainder) }
     return clauses
+  }
+
+  private static func containsAny(_ value: String, _ phrases: [String]) -> Bool {
+    phrases.contains(where: value.contains)
   }
 }

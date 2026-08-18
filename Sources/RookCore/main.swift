@@ -4,6 +4,7 @@ import RookKit
 
 func printJSON<T: Encodable>(_ value: T) throws {
   let encoder = JSONEncoder()
+  encoder.dateEncodingStrategy = .iso8601
   encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
   FileHandle.standardOutput.write(try encoder.encode(value))
   FileHandle.standardOutput.write(Data("\n".utf8))
@@ -100,6 +101,109 @@ do {
     let result = bridge.doctor()
     try printJSON(result)
     exit(result.ok ? 0 : 1)
+  }
+
+  if arguments.contains("--benchmark-routing") {
+    let baselineStore = RookManualBaselineStore(url: config.benchmarkBaselinesURL)
+    let report = RookRoutingBenchmarkSuite.run(manualBaselines: try baselineStore.medians())
+    try printJSON(report)
+    exit(report.allPassed ? 0 : 1)
+  }
+
+  if arguments.contains("--fast-path-readiness") {
+    let baselineStore = RookManualBaselineStore(url: config.benchmarkBaselinesURL)
+    let routingReport = RookRoutingBenchmarkSuite.run(
+      manualBaselines: try baselineStore.medians()
+    )
+    let recorder = try RookTaskTraceRecorder(directoryURL: config.tracesURL)
+    let report = RookFastPathReadinessReport(
+      traces: try recorder.recentTraces(limit: 10_000),
+      baselines: try baselineStore.load(),
+      routingReport: routingReport
+    )
+    try printJSON(report)
+    exit(report.passed ? 0 : 1)
+  }
+
+  if let liveIndex = arguments.firstIndex(of: "--run-fast-path-scenario-once"),
+    arguments.indices.contains(liveIndex + 1)
+  {
+    var liveResult: Result<RookFastPathLiveRunReport, Error>?
+    let runner = try MainActor.assumeIsolated { try RookFastPathLiveRunner(config: config) }
+    MainActor.assumeIsolated {
+      runner.run(scenarioID: arguments[liveIndex + 1]) { result in liveResult = result }
+    }
+    let deadline = Date().addingTimeInterval(15)
+    while liveResult == nil, Date() < deadline {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.02))
+    }
+    guard let liveResult else {
+      FileHandle.standardError.write(Data("Live fast-path scenario timed out.\n".utf8))
+      exit(1)
+    }
+    switch liveResult {
+    case .success(let report):
+      try printJSON(report)
+      exit(report.succeeded ? 0 : 1)
+    case .failure(let error):
+      throw error
+    }
+  }
+
+  if let baselineIndex = arguments.firstIndex(of: "--record-manual-baseline"),
+    arguments.indices.contains(baselineIndex + 2)
+  {
+    let scenarioID = arguments[baselineIndex + 1]
+    guard RookRoutingBenchmarkSuite.defaults.contains(where: { $0.id == scenarioID }) else {
+      FileHandle.standardError.write(Data("Unknown benchmark scenario: \(scenarioID)\n".utf8))
+      exit(2)
+    }
+    guard let milliseconds = Double(arguments[baselineIndex + 2]) else {
+      FileHandle.standardError.write(Data("Manual baseline must be provided in milliseconds.\n".utf8))
+      exit(2)
+    }
+    let store = RookManualBaselineStore(url: config.benchmarkBaselinesURL)
+    try printJSON(try store.record(scenarioID: scenarioID, milliseconds: milliseconds))
+    exit(0)
+  }
+
+  if let attentionIndex = arguments.firstIndex(of: "--record-attention-advantage"),
+    arguments.indices.contains(attentionIndex + 2)
+  {
+    let scenarioID = arguments[attentionIndex + 1]
+    guard RookRoutingBenchmarkSuite.defaults.contains(where: { $0.id == scenarioID && $0.isFastPath }) else {
+      FileHandle.standardError.write(Data("Unknown fast-path benchmark scenario: \(scenarioID)\n".utf8))
+      exit(2)
+    }
+    let note = arguments[attentionIndex + 2]
+    let store = RookManualBaselineStore(url: config.benchmarkBaselinesURL)
+    try printJSON(try store.recordAttentionAdvantage(scenarioID: scenarioID, note: note))
+    exit(0)
+  }
+
+  if arguments.contains("--trace-summary") {
+    let recorder = try RookTaskTraceRecorder(directoryURL: config.tracesURL)
+    try printJSON(RookTaskTraceSummary(traces: try recorder.recentTraces()))
+    exit(0)
+  }
+
+  if let codingIndex = arguments.firstIndex(of: "--coding-task"),
+    arguments.indices.contains(codingIndex + 2)
+  {
+    let workspacePath = arguments[codingIndex + 1]
+    let command = arguments[codingIndex + 2]
+    let library = try RookLibrary(config: config)
+    let store = try RookCodingTaskStore(directoryURL: config.codingTasksURL)
+    let result = try RookCodingTaskClient(config: config, store: store).run(
+      requestID: UUID(),
+      command: command,
+      contextSnapshot: library.contextSnapshot(for: command),
+      workspacePath: workspacePath
+    ) { progress in
+      FileHandle.standardError.write(Data("\(progress.detail)\n".utf8))
+    }
+    try printJSON(result)
+    exit(0)
   }
 
   if arguments.contains("--reset-session") {

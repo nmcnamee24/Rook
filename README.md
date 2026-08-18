@@ -1,10 +1,10 @@
 # Rook
 
-Rook is a private macOS voice companion and command center, with a native iPhone companion now in development. It uses macOS 26 SpeechAnalyzer and SpeechTranscriber for high-quality on-device recognition, the ChatGPT-authenticated Codex runtime already installed with ChatGPT, bounded Codex pawn delegation, an approval queue, and local Kokoro neural text-to-speech. It does not require a Wispr API key or an OpenAI Platform API key.
+Rook is a private macOS voice companion and command center, with a native iPhone companion now in development. It uses a Rook-owned LiveKit WakeWord ONNX model for local wake detection, macOS 26 SpeechAnalyzer and SpeechTranscriber for on-device command recognition, the ChatGPT-authenticated Codex runtime already installed with ChatGPT, bounded Codex pawn delegation, an approval queue, and local Kokoro neural text-to-speech. It does not require a wake-word account, a Wispr API key, or an OpenAI Platform API key.
 
 | Release | Phase | Platform | Language | Status |
 |---|---|---|---|---|
-| 2.23 (build 26) | 2V inference preflight | macOS 26 | Swift 6.2 | Active, private |
+| 2.27 (build 30) | 2W Rook-owned local wake | macOS 26 | Swift 6.2 | Active, private |
 | 0.2 | Mobile companion | iOS 26 | Swift 6 | Local-first, internet-relayed connection implemented |
 
 ## Repository guide
@@ -22,24 +22,24 @@ Rook is a private macOS voice companion and command center, with a native iPhone
 ## Default flow
 
 1. Say **“Rook”** followed by a command in the same natural utterance.
-2. The green ready meter listens for the wake word. After Rook hears it, the meter turns red and tracks both live voice energy and the 1.4-second pause before submission.
+2. When enrolled, the green ready meter streams 16 kHz audio to the local personalized wake model. After Rook hears it, the meter turns red and tracks both adaptive live voice activity and the 1.4-second pause before submission.
 3. Rook transcribes locally with Apple's newer macOS 26 SpeechTranscriber model.
 4. A Wispr-style prompt-polish pass removes fillers, repeated starts, and common dictation artifacts locally with no model wait. An experimental Codex rewrite remains available in configuration, but is disabled by default because currently available Codex models do not reliably finish inside the subsecond budget.
 5. If Rook has asked for a missing detail, it keeps that open question as private live state. The next short answer is resolved against the unfinished request before prompt polishing, parsers, models, Computer Control, or pawns; a clear topic switch cancels that open loop and routes normally.
-6. A context-aware inference preflight first decides whether the request is a continuation, retry, single semantic native action, genuine hybrid request, deliberate task, or unresolved reference. It resolves unique recent referents before a literal parser can mistake words such as “that” for an item name. The direct-capability guide then checks Rook Reflex, weather, Spotify, private screen capture, Mac controls, and fresh Librarian context in order.
-7. Stable ordinary questions run on a prewarmed, read-only Codex thread and appear token-by-token as the answer arrives. That thread has no tools or external-action authority.
-8. Complex, live, uncertain, file-backed, or multi-step work bypasses the ordinary model and starts a separate high-reasoning background session immediately.
-9. Every deliberate prompt may receive an independent crew of up to ten silent pawn instances. Scout, Forge, Scribe, Steward, and Auditor are available, and a role may appear more than once for independent subtasks. In a hybrid task, central Rook keeps Computer Use and other direct steps while pawns receive only independent specialist clauses; requested ordering is preserved.
-10. Crews for different prompts may deliberate at the same time. Only central Rook speaks or presents each crew's final synthesis.
+6. A deterministic preflight resolves open follow-ups, retries, unique recent referents, and only exact typed fast paths. Rook Reflex, basic weather, exact Spotify commands, explicit private screen capture, narrow Mac controls, and a fresh Librarian checkpoint may finish immediately. The preflight does not guess from domain keywords or split a semantic request into owners.
+7. Every unclaimed, semantic, compound, uncertain, or declined request goes intact to a prewarmed, read-only **Central Rook delegator**. It understands the complete intended outcome and returns one structured decision: answer now, ask one clarification, or begin deliberate work. This pass has no tools or external-action authority.
+8. When work is needed, Central Rook starts a separate high-reasoning session and remains responsible for native capabilities, tools, safety gates, dependencies, and the final synthesis.
+9. Central Rook may give a deliberate prompt an independent crew of up to ten silent pawn instances. Scout, Forge, Scribe, Steward, and Auditor are optional specialists rather than keyword-selected defaults. The older native hybrid planner remains only for safely resuming an already-open Spotify workflow with verified dependency receipts.
+10. Central sessions for different prompts may deliberate at the same time. Only Central Rook speaks or presents each crew's final synthesis.
 11. Background Rook may create or update safe personal Calendar events and save Gmail drafts. Consequential actions remain queued.
 12. The Librarian is a separate always-active context brain. After every response it compresses and labels the turn; requests that used specialist pawns also receive their own task folder with the outcome, pawn list, and exact block or interruption reason.
 13. While Rook is idle, the Librarian dispatches its own strictly read-only Calendar, Gmail, retrieval, and audit pawns every 30 minutes. Fresh snapshots can be answered locally with an explicit **as-of** time.
-14. Basic current, tomorrow, and one-to-seven-day weather requests—including natural variants such as “will it rain tomorrow?”—use a direct native Open-Meteo path. Rook warms a ten-minute cache from an approximate Mac location, so a warm forecast renders immediately and a named-city cache miss normally needs only one or two short API calls—never a model or pawn crew.
+14. Exact current, tomorrow, and one-to-seven-day weather commands use a direct native Open-Meteo path. Rook warms a ten-minute cache from an approximate Mac location, so a warm forecast renders immediately and a named-city cache miss normally needs only one or two short API calls. Natural, contextual, or decision-oriented weather language goes through Central Rook instead of being guessed from weather words.
 15. Sourced answers may include native Rook Canvas views for weather, Calendar, Spotify, online reference images, privately generated images, code fixes, diagrams, computer controls, or general structured results. The visual supplements the concise answer instead of replacing it.
-16. Exact low-risk Mac commands use the instant local controller. `Open Safari and search for…`, `open Notes`, and basic Spotify controls do not wait for a model. A connected Spotify account also handles named playback, playlists, recent listening, top items, devices, and now-playing state directly with no pawns. Study, work, and focus requests rank the user's playlist titles and descriptions, show only the strongest matches, and keep those choices available for short playback follow-ups.
-17. Rook Reflex handles bounded calculations, common conversions, local timers and reminders, battery/storage/volume checks, and exact volume controls without a model. “What's next?” reads one event from the Librarian's fresh checkpoint with a countdown and as-of time. If a known direct adapter declines a request, Rook preserves the whole command and deliberately escalates it; it never silently converts a partial match into an action.
+16. Exact low-risk Mac commands use the instant local controller. `Open Safari and search for…`, `open Notes`, basic Spotify controls, and exact named Spotify requests do not wait for Central Rook. Broader Spotify language stays intact for Central rather than receiving a hasty semantic guess from the local gate.
+17. Rook Reflex handles bounded calculations, common conversions, local timers and reminders, battery/storage/volume checks, and exact volume controls without a model. “What's next?” reads one event from the Librarian's fresh checkpoint with a countdown and as-of time. If an exact adapter declines or no exact parser claims the request, Central Rook receives the whole command and decides what happens next.
 
-If Apple Speech finalizes **“Rook”** as its own utterance, Rook silently continues listening for the command for eight seconds. It no longer speaks “Ready” over the start of your request.
+The same Apple transcription session stays open before and after the acoustic wake event, so **“Rook, open…”** does not lose the first command words or require a pause. If the owned model is missing, neither validated nor explicitly trial-enabled, or unloadable, Rook labels and uses its earlier Apple wake matcher as a compatibility fallback.
 
 ## Command center
 
@@ -61,11 +61,30 @@ The bottom voice dock says **Just say “Rook”** when ready. Its circular mete
 ./scripts/install.sh
 ```
 
+The pinned LiveKit WakeWord runtime is built and installed with Rook. It is Apache-2.0 software, runs locally through ONNX Runtime, and needs no account, access key, cloud call, or per-device fee. Rook activates only a model whose exact SHA-256 digest is authorized by either a passing corpus report or an explicit owner trial manifest.
+
+To produce the owned model:
+
+```bash
+brew install ffmpeg espeak-ng
+make enroll-wake                 # private training recordings
+make train-wake                  # production-scale synthetic + personal training
+make trial-wake                  # explicitly activate the current unvalidated candidate
+make record-wake-evaluation      # held-out samples; never used for training
+make record-wake-negative        # repeat until the negative corpus reaches 24 hours
+make promote-wake                # refuses promotion unless every gate passes
+make install
+```
+
+Production training uses the pinned source revision recorded in `Package.swift` and [the production configuration](WakeModel/rook-production.yaml). It downloads roughly 18 GB of reusable training assets and can take hours; `./scripts/train-livekit-wake.sh bootstrap` provides a smaller end-to-end engineering check but can never bypass validation. `make trial-wake` is an explicit owner override that installs the current candidate with a SHA-256-bound, visibly unvalidated trial manifest; it does not forge or bypass a passing evaluation, and Apple fallback remains available if the local runtime fails. Training recordings, generated data, candidates, active models, and corpus audio stay out of Git under `.artifacts.noindex` or `~/.codex/rook/wake`. See the [LiveKit WakeWord project](https://github.com/livekit/livekit-wakeword) and its [Apache-2.0 license](https://github.com/livekit/livekit-wakeword/blob/main/LICENSE).
+
+To validate a model instead of trusting a few demos, place uncompressed 16 kHz mono 16-bit PCM WAV files under `~/.codex/rook/wake/corpus/positive/<profile>/` and negative audio under `~/.codex/rook/wake/corpus/negative/`, then run `make evaluate-wake`. The release gate requires 20 or more positives and at least 95% recall in each of `quiet`, `whisper`, `continuous`, `office-noise`, `coffee-shop-noise`, and `far-field`, plus 24 hours of negative audio with no more than one false activation per 24 hours. `make promote-wake` runs that gate against the candidate, binds the passing report to the exact model digest, preserves any previous active model, and only then installs it. `./scripts/doctor.sh` reports the runtime, model, validation, and fallback state.
+
 Installation also synchronizes the version-controlled skill from `skill/rook/` to `~/.codex/skills/rook`. Run `make check-skill` at any time to verify that the installed skill matches the repository.
 
-Rook 2.23 requires macOS 26. On first launch, approve **Microphone**, **Speech Recognition**, and approximate **Location** when macOS asks. Location lets Rook prepare instant local weather before you ask; you can also say a city explicitly without enabling Location. The first local timer or reminder may also ask for **Notifications** so the alert can appear if Rook is in the background. Screen capture is opt-in and requested only when you explicitly ask Rook to look at a display or window. Rook appears as a `♜` in the menu bar and does not show a Dock icon.
+Rook 2.27 requires macOS 26. On first launch, approve **Microphone**, **Speech Recognition**, and approximate **Location** when macOS asks. Location lets Rook prepare instant local weather before you ask; you can also say a city explicitly without enabling Location. The first local timer or reminder may also ask for **Notifications** so the alert can appear if Rook is in the background. Screen capture is opt-in and requested only when you explicitly ask Rook to look at a display or window. Rook appears as a `♜` in the menu bar and does not show a Dock icon.
 
-Direct Google and Spotify OAuth begins in **Allies**. Rook opens the provider in your normal browser, protects the authorization with PKCE and a loopback callback, stores refresh/access tokens only in macOS Keychain, and stores only public developer client IDs in `~/.codex/rook/core/connections.json`. See [Connections](docs/CONNECTIONS.md) for the two one-time developer registrations. Spotify now uses its stored token directly for account data, search, devices, and playback. Gmail and Calendar continue using the proven Codex connectors until their guarded native clients are enabled.
+Direct Google and Spotify OAuth begins in **Allies**. **Connect Spotify** opens Spotify in your normal browser with Rook's public app identity; no Client ID is shown in the ordinary flow. Rook protects authorization with PKCE and a loopback callback and stores refresh/access tokens only in macOS Keychain. Developer builds may inject a public Spotify Client ID without adding a client secret. See [Connections](docs/CONNECTIONS.md) for the exact boundary. Spotify uses its stored token directly for account data, search, devices, and playback. Gmail and Calendar continue using the proven Codex connectors until their guarded native clients are enabled.
 
 Computer control has two layers:
 
@@ -81,7 +100,7 @@ When Rook itself asks a question, it stores one private open loop containing the
 
 Project references are durable too. Named work becomes a project node with category and topic branches—for example, `Jocks Links → Social Media → Messaging`. Later requests such as `add a following system to my social media app` resolve to the only matching project, or to a matching project whose established activity clearly dominates alternatives. The resolved project is shown on screen; genuinely tied projects still require one clarification.
 
-For deliberate file or code work, Rook verifies that the resolved workspace still exists under the user's home folder and launches Codex in that checkout. Rook's private state remains an additional writable directory for its guarded queue and Library updates; live checkout contents override stale graph context.
+For deliberate coding work, Central Rook resolves and verifies one live checkout under the user's home folder, then hands the intact request to one saved full Codex task. That task inherits the user's normal Codex configuration instead of Rook's background model or response schema. Rook remains the front door and result presenter; Codex owns the coding history, implementation, and verification. If no unique checkout is known, Rook asks instead of guessing. Private task receipts remain under Rook state while live checkout contents override stale graph context.
 
 On first graph-aware launch, the Librarian seeds project identity and activity from the high-level local Codex memory registry when available. It reads task-group checkout paths and bounded source-context records, skips transient Codex run folders, and does not import raw session transcripts into the graph. The source records remain expandable from each matching node so graph provenance is auditable.
 
@@ -122,9 +141,16 @@ To start Rook automatically when you sign in:
 ~/Applications/Rook.app/Contents/MacOS/Rook --ask "Give me a one-sentence Rook status check."
 ~/Applications/Rook.app/Contents/MacOS/Rook --checkpoint
 ~/Applications/Rook.app/Contents/MacOS/Rook --library-context "Why was the link task interrupted?"
+~/Applications/Rook.app/Contents/MacOS/Rook --benchmark-routing
+~/Applications/Rook.app/Contents/MacOS/Rook --fast-path-readiness
+~/Applications/Rook.app/Contents/MacOS/Rook --run-fast-path-scenario-once app_launch
+~/Applications/Rook.app/Contents/MacOS/Rook --record-manual-baseline spotify_resume 3000
+~/Applications/Rook.app/Contents/MacOS/Rook --record-attention-advantage spotify_resume "Hands-free playback while another app stays focused."
+~/Applications/Rook.app/Contents/MacOS/Rook --trace-summary
+~/Applications/Rook.app/Contents/MacOS/Rook --coding-task /path/to/project "Fix the failing tests and verify the result."
 ```
 
-`--speak-test` exercises the same neural speech path as the live app without starting the microphone. `--ask-fast` tests only the instant local router, and `--polish-local` shows the exact zero-network cleanup applied after dictation. `--weather-fast` benchmarks the direct weather parser, fetch, formatter, and Canvas without a model, and `--reflex-fast` benchmarks an exact Reflex command. `--ask-live` tests the streamed ordinary-answer thread, and `--ask` exercises the legacy blocking diagnostic path. `--checkpoint` performs and stores one guarded read-only Calendar/Gmail refresh; `--library-context` prints the same compact retrieval snapshot Rook receives for a query.
+`--speak-test` exercises the same neural speech path as the live app without starting the microphone. `--ask-fast` tests only the exact local gate, and `--polish-local` shows the exact zero-network cleanup applied after dictation. `--weather-fast` benchmarks the direct weather parser, fetch, formatter, and Canvas without a model, and `--reflex-fast` benchmarks an exact Reflex command. `--ask-live` retains the legacy streamed-answer diagnostic, and `--ask` exercises the legacy blocking diagnostic path; neither is the live app's Central delegation route. `--checkpoint` performs and stores one guarded read-only Calendar/Gmail refresh; `--library-context` prints the same compact retrieval snapshot Rook receives for a query. `--benchmark-routing` runs the deterministic exact-gate suite without executing external actions. `--run-fast-path-scenario-once` performs one explicitly selected real native action and records its private trace; it never loops. `--fast-path-readiness` applies the 250 ms, 99%, verified-outcome, no-fallback, streaming-prewarm, and manual-advantage gates without treating missing data as a pass. `--record-manual-baseline` stores one measured manual time, while `--record-attention-advantage` stores a concise explicit reason a hands-free path requires less attention. `--trace-summary` reports retry-aware first-attempt success and latency, and `--coding-task` exercises the same saved full-Codex handoff used by Central Rook for an explicitly supplied checkout and coding request.
 
 For deterministic UI development without starting speech recognition or changing private state:
 
@@ -141,6 +167,10 @@ Rook stores configuration, its Codex thread identifier, the latest full text and
 `~/.codex/rook/core`
 
 The folder is mode `700`; its files are mode `600`. Rook never reads or copies the underlying ChatGPT credential. Codex handles authentication through its own local credential cache.
+
+Per-request traces live under `~/.codex/rook/core/traces`. They use monotonic elapsed time and record request source, speech milestones, interpreted intent, selected route, adapter start, outcome, verification, failure category, and recovery recommendation. Traces remain private local diagnostics; they never contain OAuth tokens or raw provider payloads.
+
+Full Codex handoff receipts live under `~/.codex/rook/core/coding_tasks`. Each mode-600 record maps one Rook request to its saved Codex thread, verified checkout, status, bounded final summary, and exact interruption or failure reason. Activity shows generic progress only; command output and private file contents are not copied into progress labels or speech.
 
 The Librarian's durable state lives under `~/.codex/rook/library`:
 
@@ -163,7 +193,7 @@ Explicit preferences such as a stated home location activate immediately. Inferr
 
 `reflex_alerts.json` contains local timer/reminder labels, due times, and state. It uses the same private file permissions. Rook schedules a macOS notification and an in-app timer; reminder text is shown on screen, while spoken due alerts stay generic so private content is not read aloud unexpectedly.
 
-The streamed ordinary-answer thread uses `gpt-5.6-luna` with low reasoning. Prompt cleanup itself is local and immediate. The optional no-tools Codex rewrite is controlled by `prompt_polish_enabled`, defaults to `false`, and retains a `prompt_polish_wait_milliseconds` ceiling of `900`; exact native commands bypass it regardless. Background deliberation and pawns use `gpt-5.6-terra` with high reasoning. The immediate acknowledgment, routing decision, Library indexing, and fresh checkpoint answers are local and use no model. Legacy configs receive these defaults automatically, and prompt crews use five roles with up to ten instances while the Librarian remains independent. Edit `config.json` only while Rook is quit.
+The prewarmed structured Central delegator uses `gpt-5.6-luna` with low reasoning and no tools. Prompt cleanup itself is local and immediate. The optional no-tools Codex rewrite is controlled by `prompt_polish_enabled`, defaults to `false`, and retains a `prompt_polish_wait_milliseconds` ceiling of `900`; exact native commands bypass it regardless. Deep Central deliberation and pawns use `gpt-5.6-terra` with high reasoning. Exact fast-path answers, Library indexing, and fresh checkpoint answers are local and use no model. Legacy configs receive these defaults automatically, and prompt crews use five roles with up to ten instances while the Librarian remains independent. Edit `config.json` only while Rook is quit.
 
 Rook Canvas does not require an API key for weather. Basic forecasts use Open-Meteo directly; weather-dependent decisions, alerts, radar, travel safety, and contextual questions still use central Rook's research path. Calendar views use the connected primary Calendar or the Librarian's timestamped checkpoint. Online images must be direct public HTTPS resources, and Canvas rejects local, private-network, credential-bearing, authenticated, tracking, data, file, or insecure URLs. Images generated in the current deep Rook turn are copied into the private media store and attached to Canvas by trusted native code.
 

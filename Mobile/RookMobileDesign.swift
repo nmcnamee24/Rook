@@ -1,15 +1,18 @@
 import SwiftUI
 
 enum RookMobilePalette {
-  // Matches the desktop Steel Blue Rook palette exactly.
-  static let paper = Color(red: 247 / 255, green: 246 / 255, blue: 242 / 255)
-  static let paperBright = Color.white
-  static let ink = Color(red: 25 / 255, green: 26 / 255, blue: 29 / 255)
-  static let muted = Color(red: 111 / 255, green: 112 / 255, blue: 109 / 255)
-  static let faint = muted.opacity(0.72)
-  static let line = Color(red: 222 / 255, green: 220 / 255, blue: 213 / 255)
+  // Semantic system surfaces let iOS own contrast, vibrancy, and appearance changes.
+  static let groupedBackground = Color(uiColor: .systemGroupedBackground)
+  static let surface = Color(uiColor: .secondarySystemGroupedBackground)
+  static let paper = groupedBackground
+  static let paperBright = Color(uiColor: .systemBackground)
+  static let ink = Color.primary
+  static let muted = Color.secondary
+  static let faint = Color.secondary.opacity(0.72)
+  static let separator = Color(uiColor: .separator)
+  static let line = separator
   static let accent = Color(red: 70 / 255, green: 130 / 255, blue: 180 / 255)
-  static let green = Color(red: 46 / 255, green: 139 / 255, blue: 87 / 255)
+  static let green = Color(uiColor: .systemGreen)
 }
 
 struct RookMobileCard<Content: View>: View {
@@ -17,16 +20,12 @@ struct RookMobileCard<Content: View>: View {
 
   var body: some View {
     content
-      .padding(18)
+      .padding(16)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
-        RookMobilePalette.paperBright,
-        in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        RookMobilePalette.surface,
+        in: RoundedRectangle(cornerRadius: 20, style: .continuous)
       )
-      .overlay {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-          .stroke(RookMobilePalette.line.opacity(0.72), lineWidth: 1)
-      }
   }
 }
 

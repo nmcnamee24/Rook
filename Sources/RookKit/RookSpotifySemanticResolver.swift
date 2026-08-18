@@ -24,9 +24,17 @@ public enum RookSpotifySemanticResolver {
       "open", "find", "what", "which", "move", "switch", "transfer",
     ]
     let actionPhrases = ["put on", "go back", "pull up"]
+    let observesPlayback = containsAny(
+      lower,
+      [
+        "what is playing", "what's playing", "now playing", "current track", "current song",
+        "song that's playing", "song that is playing", "track that's playing", "track that is playing",
+        "song playing", "track playing",
+      ])
     let operational =
-      musicNouns.contains(where: lower.contains)
-      && (actionWords.contains(where: { containsWord($0, in: lower) }) || containsAny(lower, actionPhrases))
+      observesPlayback
+      || (musicNouns.contains(where: lower.contains)
+        && (actionWords.contains(where: { containsWord($0, in: lower) }) || containsAny(lower, actionPhrases)))
     guard explicitSpotify || operational else { return .notSpotify }
 
     let mutationTerms = ["delete", "remove", "create", "make", "add", "save", "follow", "unfollow"]
@@ -54,9 +62,7 @@ public enum RookSpotifySemanticResolver {
       }
       return .intent(.devices)
     }
-    if containsAny(lower, ["what is playing", "what's playing", "now playing", "current track", "current song"]) {
-      return .intent(.nowPlaying)
-    }
+    if observesPlayback { return .intent(.nowPlaying) }
     if containsAny(lower, ["recent", "lately", "listening history", "listened to"]) {
       return .intent(.recentlyPlayed)
     }
@@ -83,7 +89,9 @@ public enum RookSpotifySemanticResolver {
         return .intent(.recommendPlaylists(purposes: purposes))
       }
       if wantsPlayback {
-        if containsAny(lower, [" any ", " some ", " one of "]) { return .intent(.playAnyPlaylist) }
+        if containsAny(lower, [" a playlist", " any ", " some ", " one of "]) {
+          return .intent(.playAnyPlaylist)
+        }
         if let name = playlistName(in: command) {
           return .intent(.play(query: name, preferredKind: .playlist, libraryOnly: true))
         }

@@ -5,11 +5,11 @@ import Testing
 
 struct RookLibraryGraphTests {
   @Test
-  func socialFeatureRequestRoutesToDeliberateForgeWork() {
+  func socialFeatureRequestRoutesToCentralWithoutGuessingForge() {
     let decision = LocalRookRouter.route(
       "Hey Rook, can you work on adding a new following system for my social media app?")
     #expect(decision.destination == .deliberate)
-    #expect(decision.response.pawns.contains { $0.pawn == "Forge" })
+    #expect(decision.response.pawns.isEmpty)
   }
 
   @Test

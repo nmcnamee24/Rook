@@ -15,7 +15,6 @@ struct RookMobileApp: App {
   var body: some Scene {
     WindowGroup {
       RookMobileRootView(model: model)
-        .preferredColorScheme(.light)
     }
   }
 }

@@ -7,6 +7,7 @@ struct RookComputerExecution {
   let spokenText: String
   let target: String
   let detail: String
+  let verified: Bool
 }
 
 enum RookComputerControlError: LocalizedError {
@@ -40,12 +41,13 @@ final class RookComputerController {
     case .openApplication(let name):
       openApplication(named: name) { result in
         completion(
-          result.map { _ in
+          result.map { verified in
             RookComputerExecution(
               displayText: "**\(name)** is open and active.",
               spokenText: "\(name) is open.",
               target: name,
-              detail: "Opened and activated"
+              detail: "Opened and activated",
+              verified: verified
             )
           })
       }
@@ -57,12 +59,13 @@ final class RookComputerController {
       }
       open(url: url, in: browser) { result in
         completion(
-          result.map { _ in
+          result.map { verified in
             RookComputerExecution(
               displayText: "Opened **\(browser.displayName)** with results for “\(query).”",
               spokenText: "I opened \(browser.displayName) with your search.",
               target: browser.displayName,
-              detail: "Search · \(query)"
+              detail: "Search · \(query)",
+              verified: verified
             )
           })
       }
@@ -75,12 +78,13 @@ final class RookComputerController {
       if let browser {
         open(url: url, in: browser) { result in
           completion(
-            result.map { _ in
+            result.map { verified in
               RookComputerExecution(
                 displayText: "Opened **\(url.host() ?? "that page")** in **\(browser.displayName)**.",
                 spokenText: "I opened that page in \(browser.displayName).",
                 target: browser.displayName,
-                detail: url.host() ?? "Web page opened"
+                detail: url.host() ?? "Web page opened",
+                verified: verified
               )
             })
         }
@@ -93,7 +97,8 @@ final class RookComputerController {
                 displayText: "Opened **\(url.host() ?? "that page")** in your default browser.",
                 spokenText: "I opened that page.",
                 target: "Default browser",
-                detail: url.host() ?? "Web page opened"
+                detail: url.host() ?? "Web page opened",
+                verified: false
               )))
         } else {
           completion(.failure(RookComputerControlError.launchFailed("macOS rejected the request")))
@@ -105,40 +110,93 @@ final class RookComputerController {
     }
   }
 
-  private func openApplication(named name: String, completion: @escaping (Result<Void, Error>) -> Void) {
+  private func openApplication(named name: String, completion: @escaping (Result<Bool, Error>) -> Void) {
     guard let applicationURL = applicationURL(named: name) else {
       completion(.failure(RookComputerControlError.applicationNotFound(name)))
       return
     }
     let configuration = NSWorkspace.OpenConfiguration()
     configuration.activates = true
-    workspace.openApplication(at: applicationURL, configuration: configuration) { _, error in
+    workspace.openApplication(at: applicationURL, configuration: configuration) { application, error in
       DispatchQueue.main.async {
         if let error {
           completion(.failure(RookComputerControlError.launchFailed(error.localizedDescription)))
         } else {
-          completion(.success(()))
+          completion(.success(application?.isTerminated == false))
         }
       }
     }
   }
 
-  private func open(url: URL, in browser: RookBrowser, completion: @escaping (Result<Void, Error>) -> Void) {
+  private func open(url: URL, in browser: RookBrowser, completion: @escaping (Result<Bool, Error>) -> Void) {
     guard let applicationURL = workspace.urlForApplication(withBundleIdentifier: browser.bundleIdentifier) else {
       completion(.failure(RookComputerControlError.applicationNotFound(browser.displayName)))
       return
     }
     let configuration = NSWorkspace.OpenConfiguration()
     configuration.activates = true
-    workspace.open([url], withApplicationAt: applicationURL, configuration: configuration) { _, error in
+    workspace.open([url], withApplicationAt: applicationURL, configuration: configuration) { application, error in
       DispatchQueue.main.async {
         if let error {
           completion(.failure(RookComputerControlError.launchFailed(error.localizedDescription)))
         } else {
-          completion(.success(()))
+          guard application?.isTerminated == false else {
+            completion(.success(false))
+            return
+          }
+          guard browser == .safari else {
+            completion(.success(false))
+            return
+          }
+          self.verifySafariDestination(url, remainingReadAttempts: 4, completion: completion)
         }
       }
     }
+  }
+
+  private func verifySafariDestination(
+    _ expectedURL: URL,
+    remainingReadAttempts: Int,
+    completion: @escaping (Result<Bool, Error>) -> Void
+  ) {
+    let source = "tell application id \"com.apple.Safari\" to get URL of front document"
+    var details: NSDictionary?
+    let actual = NSAppleScript(source: source)?.executeAndReturnError(&details).stringValue
+    if details == nil,
+      let actual,
+      sameDestination(actual, expectedURL.absoluteString)
+    {
+      completion(.success(true))
+      return
+    }
+    guard remainingReadAttempts > 0 else {
+      completion(.success(false))
+      return
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+      self?.verifySafariDestination(
+        expectedURL,
+        remainingReadAttempts: remainingReadAttempts - 1,
+        completion: completion
+      )
+    }
+  }
+
+  private func sameDestination(_ first: String, _ second: String) -> Bool {
+    guard let lhs = URLComponents(string: first), let rhs = URLComponents(string: second) else {
+      return false
+    }
+    return lhs.scheme?.lowercased() == rhs.scheme?.lowercased()
+      && lhs.host?.lowercased() == rhs.host?.lowercased()
+      && normalizedPath(lhs.path) == normalizedPath(rhs.path)
+      && lhs.query == rhs.query
+  }
+
+  private func normalizedPath(_ path: String) -> String {
+    let normalized = path.isEmpty ? "/" : path
+    return normalized.count > 1 && normalized.hasSuffix("/")
+      ? String(normalized.dropLast())
+      : normalized
   }
 
   private func applicationURL(named rawName: String) -> URL? {
@@ -251,13 +309,28 @@ final class RookComputerController {
       completion(.failure(RookComputerControlError.spotifyFailed(message)))
       return
     }
+    let verified: Bool
+    switch action {
+    case .play, .pause:
+      let expected = action == .play ? "playing" : "paused"
+      let verificationSource = "tell application id \"com.spotify.client\" to get player state as string"
+      var verificationDetails: NSDictionary?
+      let state = NSAppleScript(source: verificationSource)?
+        .executeAndReturnError(&verificationDetails)
+        .stringValue?
+        .lowercased()
+      verified = verificationDetails == nil && state == expected
+    case .next, .previous:
+      verified = false
+    }
     completion(
       .success(
         RookComputerExecution(
           displayText: "**Spotify** · \(action.label) complete.",
           spokenText: "Spotify is set.",
           target: "Spotify",
-          detail: action.label
+          detail: action.label,
+          verified: verified
         )))
   }
 }

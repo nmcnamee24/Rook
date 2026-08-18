@@ -8,6 +8,7 @@ ROOK_USER_HOME="${HOME:?A user home directory is required}"
 INSTALL_ROOT="${ROOK_INSTALL_ROOT:-$ROOK_USER_HOME/Applications}"
 TARGET_APP="$INSTALL_ROOT/Rook.app"
 TTS_DIR="${ROOK_TTS_DIR:-$ROOK_USER_HOME/.codex/rook/tts}"
+WAKE_DIR="${ROOK_WAKE_DIR:-$ROOK_USER_HOME/.codex/rook/wake}"
 LAUNCH_AGENTS_DIR="$ROOK_USER_HOME/Library/LaunchAgents"
 LOGIN_PLIST="$LAUNCH_AGENTS_DIR/com.noah.rook.login.plist"
 
@@ -32,9 +33,19 @@ fi
 mkdir -p "$INSTALL_ROOT"
 "$SCRIPT_DIR/install-skill.sh"
 /usr/bin/pkill -x Rook 2>/dev/null || true
-/usr/bin/ditto "$SOURCE_APP" "$TARGET_APP"
+/usr/bin/ditto --norsrc "$SOURCE_APP" "$TARGET_APP"
 /usr/bin/xattr -cr "$TARGET_APP"
 /usr/bin/codesign --force --deep --sign "$SIGNING_IDENTITY" "$TARGET_APP"
+
+if [[ -x "$TARGET_APP/Contents/Resources/rook-livekit-wake" ]]; then
+  mkdir -p "$WAKE_DIR"
+  chmod 700 "$WAKE_DIR"
+  /usr/bin/ditto "$TARGET_APP/Contents/Resources/rook-livekit-wake" "$WAKE_DIR/rook-livekit-wake"
+  chmod 755 "$WAKE_DIR/rook-livekit-wake"
+  /usr/bin/codesign --force --sign "$SIGNING_IDENTITY" "$WAKE_DIR/rook-livekit-wake"
+  /usr/bin/ditto "$TARGET_APP/Contents/Resources/LiveKitWakeWord_LiveKitWakeWord.bundle" \
+    "$WAKE_DIR/LiveKitWakeWord_LiveKitWakeWord.bundle"
+fi
 
 if [[ "${1:-}" == "--login" ]]; then
   mkdir -p "$LAUNCH_AGENTS_DIR"

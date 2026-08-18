@@ -84,6 +84,36 @@ final class RookPendingConversationTests: XCTestCase {
     )
   }
 
+  func testHybridSpotifyQuestionPreservesTheWholeTaskForTheFollowUp() throws {
+    let source =
+      "Play my Focus playlist, tell me what is playing, and research the artist."
+    let response = RookResponse(
+      displayText: "Which playlist should I play? Deep Focus or Focus Mix?",
+      spokenText: "Which playlist should I play?",
+      intent: "clarification",
+      requiresApproval: false,
+      queueItemIDs: [],
+      pawns: [],
+      canvas: [playlistCanvas(["Deep Focus", "Focus Mix"])]
+    )
+
+    let pending = try XCTUnwrap(
+      RookPendingConversationDetector.detect(
+        response: response,
+        sourceCommand: source,
+        route: "spotify_hybrid"
+      )
+    )
+
+    XCTAssertEqual(pending.domain, .spotifyHybrid)
+    XCTAssertEqual(pending.sourceCommand, source)
+    XCTAssertEqual(pending.options, ["Deep Focus", "Focus Mix"])
+    XCTAssertEqual(
+      RookSpotifyPlaylistFollowUpResolver.resolve(answer: "the second one", options: pending.options),
+      .play(query: "Focus Mix", preferredKind: .playlist, libraryOnly: true)
+    )
+  }
+
   func testScreenshotOptionOneResolvesAgainstPersistedSemanticChoices() throws {
     let now = Date(timeIntervalSince1970: 1_786_568_283)
     let options = [

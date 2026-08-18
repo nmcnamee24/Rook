@@ -16,19 +16,34 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     let workspacePath: String?
     let screenCapture: RookScreenCaptureResult?
     let hybridPlan: RookHybridCapabilityPlan?
+    let taskExecution: RookTaskExecutionResult?
+  }
+
+  private struct CodingTaskRequest: Sendable {
+    let id: UUID
+    let displayCommand: String
+    let effectiveCommand: String
+    let workspacePath: String
   }
 
   private struct PendingPromptPolish {
     let original: String
     let local: String
     let processingRequestID: UUID
+    let source: RookTaskInputSource
     let deadline: DispatchWorkItem
+  }
+
+  private struct PrewarmedReflexResult {
+    let intent: RookReflexIntent
+    let result: Result<RookReflexExecution, Error>
   }
 
   private let previewMode: Bool
   private var statusItem: NSStatusItem!
   private var statusMenuItem: NSMenuItem!
   private var listeningMenuItem: NSMenuItem!
+  private var fluidTranscriptionMenuItem: NSMenuItem!
   private var lastResponseMenuItem: NSMenuItem!
   private var config: RookConfig!
   private var bridge: CodexBridge!
@@ -41,15 +56,22 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
   private var mobileBridge: RookMobileBridgeServer?
   private var library: RookLibrary!
   private var streamingClient: RookStreamingClient!
+  private var centralDelegationClient: RookStreamingClient!
   private var promptPolishClient: RookStreamingClient!
   private var pendingConversationStore: RookPendingConversationStore!
+  private var traceRecorder: RookTaskTraceRecorder!
+  private var taskExecutor: RookTaskExecutor!
+  private var codingTaskStore: RookCodingTaskStore!
   private var voice: VoiceController!
   private var lastResponse: RookResponse?
   private var dashboardModel: RookDashboardModel!
   private var rookWindowController: RookWindowController!
   private var activeStreamingRequests: [UUID: String] = [:]
+  private var activeCentralDelegations: [UUID: String] = [:]
   private var pendingPromptPolishes: [UUID: PendingPromptPolish] = [:]
+  private var prewarmedReflexResults: [UUID: PrewarmedReflexResult] = [:]
   private var activeDeliberations: [UUID: DeliberationRequest] = [:]
+  private var activeCodingTasks: [UUID: CodingTaskRequest] = [:]
   private var speechQueue: [String] = []
   private var isSpeakingResponse = false
   private var librarianTimer: Timer?
@@ -73,6 +95,9 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       library = try RookLibrary(config: config)
       try library.recoverInterrupted()
       pendingConversationStore = RookPendingConversationStore(documentURL: config.pendingConversationURL)
+      traceRecorder = try RookTaskTraceRecorder(directoryURL: config.tracesURL)
+      codingTaskStore = try RookCodingTaskStore(directoryURL: config.codingTasksURL)
+      try codingTaskStore.recoverInterrupted()
       if let data = try? Data(contentsOf: config.lastResponseJSONURL) {
         lastResponse = try? JSONDecoder().decode(RookResponse.self, from: data)
       }
@@ -91,9 +116,14 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       guard let directOAuth else { throw RookSpotifyError.notConnected }
       return try await directOAuth.validAccessToken(for: .spotify)
     }
+    let nativeSpotifyClient = spotifyClient!
+    taskExecutor = RookTaskExecutor { intent in
+      try await nativeSpotifyClient.executeForTask(intent)
+    }
     if !previewMode {
       streamingClient = RookStreamingClient(config: config)
-      streamingClient.start()
+      centralDelegationClient = RookStreamingClient(config: config, purpose: .centralDelegation)
+      centralDelegationClient.start()
       if config.promptPolishEnabled {
         promptPolishClient = RookStreamingClient(config: config, purpose: .promptPolish)
         promptPolishClient.start()
@@ -114,11 +144,18 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
 
     voice = VoiceController(config: config)
     voice.onStatus = { [weak self] status in self?.setStatus(status) }
-    voice.onCommand = { [weak self] command in self?.polishAndProcess(command: command) }
+    voice.onCommand = { [weak self] command, requestID, source in
+      self?.polishAndProcess(command: command, requestID: requestID, source: source)
+    }
+    voice.onStableStreamingIntent = { [weak self] candidate, requestID in
+      self?.prewarmStableStreamingIntent(candidate, requestID: requestID)
+    }
+    voice.onTraceSignal = { [weak self] signal in try? self?.traceRecorder.ingest(signal) }
     voice.onTranscript = { [weak self] transcript in self?.dashboardModel.noteCommand(transcript) }
     voice.onAudioLevel = { [weak self] level in self?.dashboardModel.updateAudioLevel(level) }
     voice.onCaptureProgress = { [weak self] progress in self?.dashboardModel.updateCaptureProgress(progress) }
     voice.onPhase = { [weak self] phase in self?.dashboardModel.updateVoicePhase(phase) }
+    voice.onWakeEngineState = { [weak self] state in self?.dashboardModel.updateWakeEngineState(state) }
     voice.onPermissionsResolved = { [weak self] granted in
       if !granted { self?.setStatus("Voice permissions required") }
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
@@ -186,7 +223,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
           config: config,
           model: dashboardModel,
           onCommand: { [weak self] requestID, command in
-            self?.polishAndProcess(command: command, requestID: requestID)
+            self?.polishAndProcess(command: command, requestID: requestID, source: .mobile)
           },
           onMoveDecision: { [weak self] decision, completion in
             self?.recordMobileMoveDecision(decision, completion: completion)
@@ -263,6 +300,18 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     listenNowItem.target = self
     menu.addItem(listenNowItem)
 
+    fluidTranscriptionMenuItem = NSMenuItem(
+      title: "FluidAudio Transcription (Trial)",
+      action: #selector(toggleFluidTranscriptionTrial),
+      keyEquivalent: ""
+    )
+    fluidTranscriptionMenuItem.target = self
+    fluidTranscriptionMenuItem.state =
+      (UserDefaults.standard.object(
+        forKey: VoiceController.fluidTranscriptionTrialPreferenceKey
+      ) as? Bool ?? true) ? .on : .off
+    menu.addItem(fluidTranscriptionMenuItem)
+
     let typeItem = NSMenuItem(title: "Type a Command…", action: #selector(typeCommand), keyEquivalent: "t")
     typeItem.target = self
     menu.addItem(typeItem)
@@ -310,8 +359,13 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     NSWorkspace.shared.open(url)
   }
 
-  private func process(command: String, requestID requestedID: UUID? = nil) {
+  private func process(
+    command: String,
+    requestID requestedID: UUID? = nil,
+    source: RookTaskInputSource = .unknown
+  ) {
     let requestID = requestedID ?? UUID()
+    beginTrace(id: requestID, source: source, command: command)
     var routedCommand = command
     var continuationDisplayCommand: String?
     switch pendingConversationStore.resolve(command) {
@@ -326,6 +380,24 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     case .continuation(let continuation):
       let pending = continuation.pending
       continuationDisplayCommand = "\(command)  →  \(pending.sourceCommand)"
+      if pending.domain == .spotifyHybrid,
+        let intent = RookSpotifyPlaylistFollowUpResolver.resolve(
+          answer: continuation.answer,
+          options: pending.options
+        ),
+        let plan = RookHybridCapabilityPlanner.plan(pending.sourceCommand),
+        let playbackStep = RookTaskExecutor.playbackStepOrder(in: plan)
+      {
+        processSpotifyHybridContinuation(
+          displayCommand: continuationDisplayCommand ?? command,
+          sourceCommand: pending.sourceCommand,
+          plan: plan,
+          playbackStep: playbackStep,
+          intent: intent,
+          requestID: requestID
+        )
+        return
+      }
       if pending.domain == .spotifyPlaylist,
         let intent = RookSpotifyPlaylistFollowUpResolver.resolve(
           answer: continuation.answer,
@@ -350,6 +422,16 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       recentEntries: library.entries()
     )
     let effectiveCommand = interpretation.effectiveCommand
+    trace(
+      id: requestID,
+      stage: .intentSelected,
+      status: .succeeded,
+      component: "inference",
+      detail: interpretation.basis.rawValue,
+      metadata: ["confidence": String(format: "%.2f", interpretation.confidence)],
+      command: command,
+      effectiveCommand: effectiveCommand
+    )
     let projectResolution = library.resolveProjectReference(effectiveCommand)
     let projectWorkspace = projectResolution?.project.referencedWorkspacePaths.first { candidate in
       var isDirectory: ObjCBool = false
@@ -372,6 +454,26 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       cachedDecision: library.cachedOperationalDecision(for: effectiveCommand)
     )
     let directResolution = inference.resolution
+    let routingObservation = RookRoutingBenchmarkSuite.observe(
+      directResolution,
+      command: effectiveCommand
+    )
+    trace(
+      id: requestID,
+      stage: .routeSelected,
+      status: .succeeded,
+      component: "deliberator",
+      detail: routingObservation.route,
+      metadata: [
+        "capabilities": routingObservation.capabilities.map(\.rawValue).joined(separator: ","),
+        "computer_operator": String(routingObservation.usesComputerOperator),
+        "execution_contracts": routingObservation.capabilities.map {
+          RookDirectCapabilityGuide.executionContract(for: $0).adapter
+        }.joined(separator: ","),
+        "dependent_steps": String(routingObservation.dependentStepCount),
+      ],
+      route: routingObservation.route
+    )
     let decision: LocalRookDecision
     var hybridPlan: RookHybridCapabilityPlan?
     switch directResolution {
@@ -415,12 +517,22 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       }
       return
     case .fallThrough(let capability):
-      decision = LocalRookRouter.routeAfterDirectCapabilityMiss(
-        effectiveCommand,
-        capability: capability
+      launchCentralDelegation(
+        id: requestID,
+        displayCommand: displayCommand,
+        effectiveCommand: effectiveCommand,
+        workspacePath: projectWorkspace,
+        declinedCapability: capability
       )
+      return
     case .unclaimed:
-      decision = LocalRookRouter.route(effectiveCommand)
+      launchCentralDelegation(
+        id: requestID,
+        displayCommand: displayCommand,
+        effectiveCommand: effectiveCommand,
+        workspacePath: projectWorkspace
+      )
+      return
     }
 
     let immediate = decision.response.immediateResponse
@@ -438,6 +550,12 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
 
     switch decision.destination {
     case .instant:
+      traceExternalOutcome(
+        id: requestID,
+        route: decision.destination.rawValue,
+        adapter: "local_router",
+        verified: true
+      )
       persistLastResponse(
         immediate,
         command: displayCommand,
@@ -452,22 +570,100 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       )
       dashboardModel.refreshLibrary()
       setStatus(backgroundStatus())
+      finishTrace(id: requestID, outcome: .succeeded, verified: true)
     case .stream:
       launchStreamingAnswer(id: requestID, displayCommand: displayCommand, effectiveCommand: effectiveCommand)
       setStatus(backgroundStatus())
     case .deliberate:
-      launchDeliberation(
-        id: requestID,
-        displayCommand: displayCommand,
-        effectiveCommand: effectiveCommand,
-        quick: decision.response,
-        workspacePath: projectWorkspace,
-        hybridPlan: hybridPlan
-      )
-      setStatus(backgroundStatus())
+      if let hybridPlan, RookTaskExecutor.supports(hybridPlan) {
+        launchTaskExecution(
+          id: requestID,
+          displayCommand: displayCommand,
+          effectiveCommand: effectiveCommand,
+          quick: decision.response,
+          workspacePath: projectWorkspace,
+          plan: hybridPlan
+        )
+        setStatus("Running native steps…")
+      } else {
+        launchDeliberation(
+          id: requestID,
+          displayCommand: displayCommand,
+          effectiveCommand: effectiveCommand,
+          quick: decision.response,
+          workspacePath: projectWorkspace,
+          hybridPlan: hybridPlan
+        )
+        setStatus(backgroundStatus())
+      }
     }
 
     speakResponse(decision.response.spokenText)
+  }
+
+  private func processSpotifyHybridContinuation(
+    displayCommand: String,
+    sourceCommand: String,
+    plan: RookHybridCapabilityPlan,
+    playbackStep: Int,
+    intent: RookSpotifyIntent,
+    requestID: UUID
+  ) {
+    trace(
+      id: requestID,
+      stage: .intentSelected,
+      status: .succeeded,
+      component: "pending_conversation",
+      detail: "spotify_hybrid_continuation",
+      command: displayCommand,
+      effectiveCommand: sourceCommand
+    )
+    trace(
+      id: requestID,
+      stage: .routeSelected,
+      status: .succeeded,
+      component: "deliberator",
+      detail: "hybrid",
+      metadata: [
+        "capabilities": "spotify",
+        "computer_operator": "false",
+        "execution_contracts": RookDirectCapabilityGuide.executionContract(for: .spotify).adapter,
+        "dependent_steps": String(plan.steps.filter { !$0.dependsOn.isEmpty }.count),
+      ],
+      route: "hybrid"
+    )
+    let planned = LocalRookRouter.routeHybrid(sourceCommand, plan: plan).response
+    let quick = QuickRookResponse(
+      displayText: "Got it—I’ll use that playlist, verify what starts playing, and continue the artist research.",
+      spokenText: "Got it. I’ll play that and continue the research.",
+      route: planned.route,
+      intent: planned.intent,
+      pawns: planned.pawns,
+      canvas: planned.canvas
+    )
+    let decision = LocalRookDecision(destination: .deliberate, response: quick)
+    _ = try? library.beginTurn(
+      id: requestID,
+      command: displayCommand,
+      route: LocalRookDestination.deliberate.rawValue,
+      pawns: quick.pawns
+    )
+    dashboardModel.refreshLibrary()
+    dashboardModel.beginRequest(id: requestID, command: displayCommand)
+    dashboardModel.presentLocal(decision, requestID: requestID, command: displayCommand)
+    lastResponse = quick.immediateResponse
+    lastResponseMenuItem.isEnabled = true
+    launchTaskExecution(
+      id: requestID,
+      displayCommand: displayCommand,
+      effectiveCommand: sourceCommand,
+      quick: quick,
+      workspacePath: nil,
+      plan: plan,
+      intentOverrides: [playbackStep: intent]
+    )
+    setStatus(backgroundStatus())
+    speakResponse(quick.spokenText)
   }
 
   private func processPendingCancellation(
@@ -475,6 +671,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     pending: RookPendingConversation,
     requestID: UUID
   ) {
+    traceAdapterStart(id: requestID, route: "context_cancelled", adapter: "pending_conversation")
     let label = pending.sourceCommand
       .split(whereSeparator: \.isWhitespace)
       .prefix(5)
@@ -515,17 +712,40 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     lastResponseMenuItem.isEnabled = true
     setStatus(backgroundStatus())
     speakResponse(response.spokenText)
+    finishTrace(id: requestID, outcome: .cancelled, verified: true)
   }
 
-  private func polishAndProcess(command: String, requestID: UUID? = nil) {
+  private func polishAndProcess(
+    command: String,
+    requestID: UUID? = nil,
+    source: RookTaskInputSource = .unknown
+  ) {
+    let processingRequestID = requestID ?? UUID()
+    beginTrace(id: processingRequestID, source: source, command: command)
+    trace(
+      id: processingRequestID,
+      stage: .requestReceived,
+      status: .succeeded,
+      component: "orchestrator",
+      detail: "Command entered the Rook request pipeline.",
+      command: command
+    )
     let local = RookPromptRefiner.refine(command)
     guard !local.isEmpty else { return }
+    trace(
+      id: processingRequestID,
+      stage: .promptRefined,
+      status: .succeeded,
+      component: "prompt_refiner",
+      detail: local == command ? "unchanged" : "locally_refined",
+      effectiveCommand: local
+    )
     dashboardModel.noteCommand(local)
 
     // An answer to Rook's own question should never wait on a prompt-polish
     // model. The pending-context resolver is both faster and more accurate.
     if pendingConversationStore.current() != nil {
-      process(command: local, requestID: requestID)
+      process(command: local, requestID: processingRequestID, source: source)
       return
     }
 
@@ -534,12 +754,11 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       RookPromptRefiner.needsModelPolish(original: command, locallyRefined: local),
       shouldUseModelPromptPolish(local)
     else {
-      process(command: local, requestID: requestID)
+      process(command: local, requestID: processingRequestID, source: source)
       return
     }
 
     let polishRequestID = UUID()
-    let processingRequestID = requestID ?? UUID()
     setStatus("Polishing your prompt")
     let deadline = DispatchWorkItem { [weak self] in
       self?.finishPromptPolish(id: polishRequestID, modelCandidate: nil)
@@ -548,6 +767,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       original: command,
       local: local,
       processingRequestID: processingRequestID,
+      source: source,
       deadline: deadline
     )
     DispatchQueue.main.asyncAfter(
@@ -593,7 +813,49 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
         RookPromptRefiner.validatedModelPolish($0, preserving: pending.original)
       } ?? pending.local
     dashboardModel.noteCommand(polished)
-    process(command: polished, requestID: pending.processingRequestID)
+    process(command: polished, requestID: pending.processingRequestID, source: pending.source)
+  }
+
+  private func prewarmStableStreamingIntent(
+    _ candidate: RookStreamingIntentCandidate,
+    requestID: UUID
+  ) {
+    guard case .reflex(let intent) = RookDirectCapabilityGuide.resolve(candidate.command),
+      RookStreamingIntentPolicy.isSafeToPrepare(intent)
+    else { return }
+
+    trace(
+      id: requestID,
+      stage: .adapterStarted,
+      status: .started,
+      component: candidate.adapter,
+      detail: "Side-effect-free native preparation started before final transcript.",
+      metadata: ["execution": "private_prewarm"],
+      route: "reflex_native",
+      adapter: candidate.adapter
+    )
+    reflexController.execute(intent) { [weak self] result in
+      guard let self else { return }
+      self.prewarmedReflexResults[requestID] = PrewarmedReflexResult(
+        intent: intent,
+        result: result
+      )
+      self.trace(
+        id: requestID,
+        stage: .prewarmReady,
+        status: {
+          if case .success = result { return .succeeded }
+          return .failed
+        }(),
+        component: candidate.adapter,
+        detail: "Private native preparation finished; the result remains conditional on the final transcript.",
+        metadata: ["execution": "private_prewarm"]
+      )
+      DispatchQueue.main.asyncAfter(deadline: .now() + 30) { [weak self] in
+        guard self?.prewarmedReflexResults[requestID]?.intent == intent else { return }
+        self?.prewarmedReflexResults.removeValue(forKey: requestID)
+      }
+    }
   }
 
   private func processReflexCommand(
@@ -601,6 +863,10 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     intent: RookReflexIntent,
     requestID: UUID
   ) {
+    let prewarmed = prewarmedReflexResults.removeValue(forKey: requestID)
+    if prewarmed?.intent != intent {
+      traceAdapterStart(id: requestID, route: "reflex_native", adapter: "rook_reflex")
+    }
     let quick = QuickRookResponse(
       displayText: intent.progressText,
       spokenText: "On it.",
@@ -620,79 +886,102 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     dashboardModel.presentLocal(decision, requestID: requestID, command: command)
     setStatus(intent.progressText)
 
-    reflexController.execute(intent) { [weak self] result in
-      guard let self else { return }
-      switch result {
-      case .success(let execution):
-        let response = RookResponse(
-          displayText: execution.displayText,
-          spokenText: execution.spokenText,
-          intent: "status",
-          requiresApproval: false,
-          queueItemIDs: [],
-          pawns: [],
-          canvas: [execution.canvas]
-        )
-        _ = try? self.library.finishTurn(
-          id: requestID,
-          command: command,
-          route: "reflex_native",
-          displayText: execution.displayText,
-          pawns: []
-        )
-        if self.dashboardModel.completeInstant(response, command: command, requestID: requestID) {
-          self.lastResponse = response
-          self.persistLastResponse(response, command: command, route: "reflex_native")
-        }
-        self.lastResponseMenuItem.isEnabled = true
-        self.dashboardModel.refreshLibrary()
-        self.setStatus(self.backgroundStatus())
-        self.speakResponse(execution.spokenText)
-
-      case .failure(let error):
-        let message = error.localizedDescription
-        let response = RookResponse(
-          displayText: "**Rook Reflex needs clarification.** \(message)",
-          spokenText: message,
-          intent: "error",
-          requiresApproval: false,
-          queueItemIDs: [],
-          pawns: [],
-          canvas: [
-            RookCanvasBlock(
-              id: "reflex_error",
-              kind: .list,
-              title: "Rook Reflex",
-              subtitle: "Not completed",
-              items: [
-                RookCanvasItem(
-                  id: "reflex_issue",
-                  label: "Needs clarification",
-                  detail: message,
-                  value: "Not completed",
-                  symbol: .warning
-                )
-              ]
-            )
-          ]
-        )
-        _ = try? self.library.failTurn(
-          id: requestID,
-          command: command,
-          route: "reflex_native",
-          displayText: response.displayText,
-          reason: message,
-          pawns: []
-        )
-        if self.dashboardModel.completeInstant(response, command: command, requestID: requestID) {
-          self.lastResponse = response
-          self.persistLastResponse(response, command: command, route: "reflex_native")
-        }
-        self.lastResponseMenuItem.isEnabled = true
-        self.dashboardModel.refreshLibrary()
-        self.setStatus(self.backgroundStatus(fallback: "Reflex needs clarification"))
-        self.speakResponse(response.spokenText)
+    if let prewarmed, prewarmed.intent == intent {
+      completeReflexCommand(
+        prewarmed.result,
+        command: command,
+        requestID: requestID
+      )
+    } else {
+      reflexController.execute(intent) { [weak self] result in
+        self?.completeReflexCommand(result, command: command, requestID: requestID)
       }
+    }
+  }
+
+  private func completeReflexCommand(
+    _ result: Result<RookReflexExecution, Error>,
+    command: String,
+    requestID: UUID
+  ) {
+    switch result {
+    case .success(let execution):
+      traceExternalOutcome(
+        id: requestID,
+        route: "reflex_native",
+        adapter: "rook_reflex",
+        verified: true
+      )
+      let response = RookResponse(
+        displayText: execution.displayText,
+        spokenText: execution.spokenText,
+        intent: "status",
+        requiresApproval: false,
+        queueItemIDs: [],
+        pawns: [],
+        canvas: [execution.canvas]
+      )
+      _ = try? library.finishTurn(
+        id: requestID,
+        command: command,
+        route: "reflex_native",
+        displayText: execution.displayText,
+        pawns: []
+      )
+      if dashboardModel.completeInstant(response, command: command, requestID: requestID) {
+        lastResponse = response
+        persistLastResponse(response, command: command, route: "reflex_native")
+      }
+      lastResponseMenuItem.isEnabled = true
+      dashboardModel.refreshLibrary()
+      setStatus(backgroundStatus())
+      speakResponse(execution.spokenText)
+      finishTrace(id: requestID, outcome: .succeeded, verified: true)
+
+    case .failure(let error):
+      let message = error.localizedDescription
+      traceFailure(id: requestID, message: message, capability: .reflex)
+      let response = RookResponse(
+        displayText: "**Rook Reflex needs clarification.** \(message)",
+        spokenText: message,
+        intent: "error",
+        requiresApproval: false,
+        queueItemIDs: [],
+        pawns: [],
+        canvas: [
+          RookCanvasBlock(
+            id: "reflex_error",
+            kind: .list,
+            title: "Rook Reflex",
+            subtitle: "Not completed",
+            items: [
+              RookCanvasItem(
+                id: "reflex_issue",
+                label: "Needs clarification",
+                detail: message,
+                value: "Not completed",
+                symbol: .warning
+              )
+            ]
+          )
+        ]
+      )
+      _ = try? library.failTurn(
+        id: requestID,
+        command: command,
+        route: "reflex_native",
+        displayText: response.displayText,
+        reason: message,
+        pawns: []
+      )
+      if dashboardModel.completeInstant(response, command: command, requestID: requestID) {
+        lastResponse = response
+        persistLastResponse(response, command: command, route: "reflex_native")
+      }
+      lastResponseMenuItem.isEnabled = true
+      dashboardModel.refreshLibrary()
+      setStatus(backgroundStatus(fallback: "Reflex needs clarification"))
+      speakResponse(response.spokenText)
     }
   }
 
@@ -749,6 +1038,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     request: RookWeatherRequest,
     requestID: UUID
   ) {
+    traceAdapterStart(id: requestID, route: "weather_native", adapter: "open_meteo")
     let quick = QuickRookResponse(
       displayText: "Pulling the live forecast…",
       spokenText: "Checking the weather.",
@@ -772,6 +1062,12 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       guard let self else { return }
       switch result {
       case .success(let response):
+        self.traceExternalOutcome(
+          id: requestID,
+          route: "weather_native",
+          adapter: "open_meteo",
+          verified: true
+        )
         _ = try? self.library.finishTurn(
           id: requestID,
           command: command,
@@ -787,9 +1083,11 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
         self.dashboardModel.refreshLibrary()
         self.setStatus(self.backgroundStatus())
         self.speakResponse(response.spokenText)
+        self.finishTrace(id: requestID, outcome: .succeeded, verified: true)
 
       case .failure(let error):
         let message = error.localizedDescription
+        self.traceFailure(id: requestID, message: message, capability: .weather)
         let response = RookResponse(
           displayText: "**Instant weather needs attention.** \(message)",
           spokenText: "I need your location once before instant weather will work.",
@@ -840,6 +1138,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     intent: RookComputerIntent,
     requestID: UUID
   ) {
+    traceAdapterStart(id: requestID, route: "computer_native", adapter: "native_mac_controller")
     let quick = QuickRookResponse(
       displayText: intent.progressText,
       spokenText: "On it.",
@@ -863,6 +1162,12 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       guard let self else { return }
       switch result {
       case .success(let execution):
+        self.traceExternalOutcome(
+          id: requestID,
+          route: "computer_native",
+          adapter: "native_mac_controller",
+          verified: execution.verified
+        )
         let response = RookResponse(
           displayText: execution.displayText,
           spokenText: execution.spokenText,
@@ -887,9 +1192,11 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
         self.dashboardModel.refreshLibrary()
         self.setStatus(self.backgroundStatus())
         self.speakResponse(execution.spokenText)
+        self.finishTrace(id: requestID, outcome: .succeeded, verified: execution.verified)
 
       case .failure(let error):
         let message = error.localizedDescription
+        self.traceFailure(id: requestID, message: message, capability: .computerControl)
         let response = RookResponse(
           displayText: "**Computer control needs attention.** \(message)",
           spokenText: "I couldn't finish that computer control. Check Rook on screen.",
@@ -942,6 +1249,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     workspacePath: String?,
     requestID: UUID
   ) {
+    traceAdapterStart(id: requestID, route: "screen_capture", adapter: "screen_capture_kit")
     let quick = QuickRookResponse(
       displayText: request.progressText,
       spokenText: "I’m taking a private look now.",
@@ -965,6 +1273,12 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       guard let self else { return }
       do {
         let capture = try await self.screenCaptureController.capture(request)
+        self.traceExternalOutcome(
+          id: requestID,
+          route: "screen_capture",
+          adapter: "screen_capture_kit",
+          verified: true
+        )
         self.launchDeliberation(
           id: requestID,
           displayCommand: command,
@@ -975,6 +1289,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
         )
       } catch {
         let message = error.localizedDescription
+        self.traceFailure(id: requestID, message: message, capability: .screenCapture)
         let response = RookResponse(
           displayText: "**Screen capture needs attention.** \(message)",
           spokenText: "I couldn’t capture that view. The details are on screen.",
@@ -1030,6 +1345,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     intent: RookSpotifyIntent,
     requestID: UUID
   ) {
+    traceAdapterStart(id: requestID, route: "spotify_native", adapter: "spotify_web_api")
     let quick = QuickRookResponse(
       displayText: intent.progressText,
       spokenText: "Checking Spotify.",
@@ -1052,7 +1368,15 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     Task { [weak self] in
       guard let self else { return }
       do {
-        let response = try await self.spotifyClient.execute(intent)
+        let output = try await self.spotifyClient.executeForTask(intent)
+        let response = output.response
+        let verified = output.verified
+        self.traceExternalOutcome(
+          id: requestID,
+          route: "spotify_native",
+          adapter: "spotify_web_api",
+          verified: verified
+        )
         _ = try? self.library.finishTurn(
           id: requestID,
           command: command,
@@ -1068,8 +1392,10 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
         self.dashboardModel.refreshLibrary()
         self.setStatus(self.backgroundStatus())
         self.speakResponse(response.spokenText)
+        self.finishTrace(id: requestID, outcome: .succeeded, verified: verified)
       } catch {
         let message = error.localizedDescription
+        self.traceFailure(id: requestID, message: message, capability: .spotify)
         let response = RookResponse(
           displayText: "**Spotify needs attention.** \(message)",
           spokenText: "I couldn’t finish that Spotify request. Check Rook on screen.",
@@ -1141,6 +1467,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     message: String,
     requestID: UUID
   ) {
+    traceAdapterStart(id: requestID, route: "spotify_native", adapter: "spotify_clarification")
     let response = RookResponse(
       displayText: message,
       spokenText: message,
@@ -1196,6 +1523,14 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     lastResponseMenuItem.isEnabled = true
     setStatus(backgroundStatus())
     speakResponse(response.spokenText)
+    traceExternalOutcome(
+      id: requestID,
+      route: "spotify_native",
+      adapter: "spotify_clarification",
+      verified: true,
+      status: .clarified
+    )
+    finishTrace(id: requestID, outcome: .clarified, verified: true)
   }
 
   private func processDirectCapabilityClarification(
@@ -1204,6 +1539,11 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     message: String,
     requestID: UUID
   ) {
+    traceAdapterStart(
+      id: requestID,
+      route: "\(capability.rawValue)_native",
+      adapter: "direct_clarification"
+    )
     let descriptor = RookDirectCapabilityGuide.cheatSheet.first { $0.id == capability }
     let title = descriptor?.title ?? "Direct capability"
     let route = "\(capability.rawValue)_native"
@@ -1248,6 +1588,14 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     lastResponseMenuItem.isEnabled = true
     setStatus(backgroundStatus())
     speakResponse(response.spokenText)
+    traceExternalOutcome(
+      id: requestID,
+      route: route,
+      adapter: "direct_clarification",
+      verified: true,
+      status: .clarified
+    )
+    finishTrace(id: requestID, outcome: .clarified, verified: true)
   }
 
   private func computerFallback(for intent: RookSpotifyIntent) -> RookSpotifyAction? {
@@ -1278,7 +1626,161 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     )
   }
 
+  /// Gives every request that was not claimed by an exact native fast path to
+  /// Central Rook before any deep work begins. This pass understands the whole
+  /// request, but cannot use tools or take action; it may answer, clarify, or
+  /// hand the intact request to the deep Central Rook with a small pawn plan.
+  private func launchCentralDelegation(
+    id: UUID,
+    displayCommand: String,
+    effectiveCommand: String,
+    workspacePath: String?,
+    declinedCapability: RookDirectCapabilityID? = nil
+  ) {
+    let holding = LocalRookDecision(
+      destination: .stream,
+      response: QuickRookResponse(
+        displayText: "Central Rook is deciding the best way to handle that.",
+        spokenText: "Let me work out the right way to handle that.",
+        route: "answer_now",
+        intent: "status",
+        pawns: []
+      )
+    )
+    _ = try? library.beginTurn(
+      id: id,
+      command: displayCommand,
+      route: "central_delegation",
+      pawns: []
+    )
+    dashboardModel.refreshLibrary()
+    dashboardModel.beginRequest(id: id, command: displayCommand)
+    dashboardModel.presentLocal(holding, requestID: id, command: displayCommand)
+    activeCentralDelegations[id] = displayCommand
+    traceAdapterStart(id: id, route: "central_delegation", adapter: "central_rook_front")
+    setStatus(backgroundStatus())
+
+    var contextSnapshot = library.contextSnapshot(for: effectiveCommand)
+    if let declinedCapability {
+      contextSnapshot +=
+        "\n\nTrusted native routing note: the exact \(declinedCapability.rawValue) fast path did not safely claim this request. Interpret the full request and choose the next owner."
+    }
+    centralDelegationClient.answer(
+      id: id,
+      command: effectiveCommand,
+      contextSnapshot: contextSnapshot,
+      onDelta: { _ in },
+      completion: { [weak self] result in
+        DispatchQueue.main.async {
+          self?.handleCentralDelegationResult(
+            result,
+            id: id,
+            displayCommand: displayCommand,
+            effectiveCommand: effectiveCommand,
+            workspacePath: workspacePath
+          )
+        }
+      }
+    )
+  }
+
+  private func handleCentralDelegationResult(
+    _ result: Result<String, Error>,
+    id: UUID,
+    displayCommand: String,
+    effectiveCommand: String,
+    workspacePath: String?
+  ) {
+    guard activeCentralDelegations.removeValue(forKey: id) != nil else { return }
+    do {
+      let text = try result.get()
+      let decoded = try JSONDecoder().decode(QuickRookResponse.self, from: Data(text.utf8))
+      guard decoded.route == "answer_now" || decoded.route == "deliberate" else {
+        throw RookStreamingError.invalidResponse("Central Rook selected an unsupported route.")
+      }
+      let sanitized = bridge.sanitized(decoded)
+      let quick = QuickRookResponse(
+        displayText: sanitized.displayText,
+        spokenText: sanitized.spokenText,
+        route: sanitized.route,
+        intent: sanitized.intent,
+        pawns: sanitized.route == "answer_now" ? [] : sanitized.pawns,
+        canvas: []
+      )
+      trace(
+        id: id,
+        stage: .routeSelected,
+        status: .succeeded,
+        component: "central_rook_front",
+        detail: quick.route,
+        metadata: ["pawn_count": String(quick.pawns.count)],
+        route: quick.route
+      )
+
+      if quick.route == "answer_now" {
+        let response = quick.immediateResponse
+        _ = try? library.finishTurn(
+          id: id,
+          command: displayCommand,
+          route: "central_answer",
+          displayText: response.displayText,
+          pawns: []
+        )
+        let isLatest = dashboardModel.completeInstant(response, command: displayCommand, requestID: id)
+        dashboardModel.refreshLibrary()
+        if isLatest {
+          lastResponse = response
+          lastResponseMenuItem.isEnabled = true
+          persistLastResponse(response, command: displayCommand, route: "central_answer")
+          speakResponse(response.spokenText)
+        }
+        traceExternalOutcome(id: id, route: "central_answer", adapter: "central_rook_front", verified: false)
+        finishTrace(id: id, outcome: quick.intent == "clarification" ? .clarified : .succeeded, verified: false)
+        setStatus(backgroundStatus())
+        return
+      }
+
+      dashboardModel.presentQuick(quick, requestID: id, command: displayCommand)
+      lastResponse = quick.immediateResponse
+      lastResponseMenuItem.isEnabled = true
+      launchDeliberation(
+        id: id,
+        displayCommand: displayCommand,
+        effectiveCommand: effectiveCommand,
+        quick: quick,
+        workspacePath: workspacePath
+      )
+      setStatus(backgroundStatus())
+      speakResponse(quick.spokenText)
+    } catch {
+      trace(
+        id: id,
+        stage: .recoverySelected,
+        status: .started,
+        component: "recovery_policy",
+        detail: error.localizedDescription,
+        metadata: ["action": RookRecoveryAction.escalateDeliberation.rawValue]
+      )
+      let quick = LocalRookRouter.centralHandoff(
+        displayText: "Central Rook is taking a deeper look."
+      ).response
+      dashboardModel.presentQuick(quick, requestID: id, command: displayCommand)
+      lastResponse = quick.immediateResponse
+      lastResponseMenuItem.isEnabled = true
+      launchDeliberation(
+        id: id,
+        displayCommand: displayCommand,
+        effectiveCommand: effectiveCommand,
+        quick: quick,
+        workspacePath: workspacePath
+      )
+      setStatus(backgroundStatus())
+      speakResponse(quick.spokenText)
+    }
+  }
+
   private func launchStreamingAnswer(id: UUID, displayCommand: String, effectiveCommand: String) {
+    traceAdapterStart(id: id, route: "stream", adapter: "codex_stream")
     activeStreamingRequests[id] = displayCommand
     streamingClient.answer(
       id: id,
@@ -1312,6 +1814,14 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     case .success(let text):
       finishStreamingAnswer(text, id: id, command: displayCommand)
     case .failure(let error):
+      trace(
+        id: id,
+        stage: .recoverySelected,
+        status: .started,
+        component: "recovery_policy",
+        detail: RookFailureCategory.executionFailed.rawValue,
+        metadata: ["action": RookRecoveryAction.retrySameAdapter.rawValue]
+      )
       runFallbackAnswer(
         id: id,
         displayCommand: displayCommand,
@@ -1340,6 +1850,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
           self.activeStreamingRequests.removeValue(forKey: id)
           let reason =
             "Live answer failed: \(originalError.localizedDescription). Fallback failed: \(error.localizedDescription)"
+          self.traceFailure(id: id, message: reason, capability: nil)
           _ = try? self.library.failTurn(
             id: id,
             command: displayCommand,
@@ -1362,6 +1873,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
   }
 
   private func finishStreamingAnswer(_ text: String, id: UUID, command: String) {
+    traceExternalOutcome(id: id, route: "stream", adapter: "codex_stream", verified: false)
     activeStreamingRequests.removeValue(forKey: id)
     let spoken = spokenSummary(from: text)
     let response = RookResponse(
@@ -1388,6 +1900,144 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     lastResponseMenuItem.isEnabled = true
     setStatus(backgroundStatus())
     speakResponse(spoken)
+    finishTrace(id: id, outcome: .succeeded, verified: false)
+  }
+
+  private func launchTaskExecution(
+    id: UUID,
+    displayCommand: String,
+    effectiveCommand: String,
+    quick: QuickRookResponse,
+    workspacePath: String?,
+    plan: RookHybridCapabilityPlan,
+    intentOverrides: [Int: RookSpotifyIntent] = [:]
+  ) {
+    traceAdapterStart(id: id, route: "hybrid", adapter: "rook_task_executor")
+    Task { [weak self] in
+      guard let self else { return }
+      let execution = await self.taskExecutor.execute(
+        plan,
+        intentOverrides: intentOverrides
+      ) { [weak self] event in
+        self?.traceTaskStepEvent(id: id, event: event)
+      }
+
+      if execution.canStartDependentWork {
+        self.launchDeliberation(
+          id: id,
+          displayCommand: displayCommand,
+          effectiveCommand: effectiveCommand,
+          quick: quick,
+          workspacePath: workspacePath,
+          hybridPlan: plan,
+          taskExecution: execution
+        )
+        self.setStatus(self.backgroundStatus(fallback: "Native steps verified · research running"))
+      } else {
+        self.finishBlockedTaskExecution(
+          execution,
+          id: id,
+          displayCommand: displayCommand,
+          sourceCommand: effectiveCommand,
+          quick: quick
+        )
+      }
+    }
+  }
+
+  private func finishBlockedTaskExecution(
+    _ execution: RookTaskExecutionResult,
+    id: UUID,
+    displayCommand: String,
+    sourceCommand: String,
+    quick: QuickRookResponse
+  ) {
+    let blocking =
+      execution.blockingStep
+      ?? execution.steps.first(where: { $0.state == .skipped })
+    let category = blocking?.failureCategory ?? .dependencyFailed
+    let detail =
+      blocking?.detail.isEmpty == false
+      ? blocking?.detail ?? "A native prerequisite did not complete."
+      : "A native prerequisite did not complete."
+    let recovery =
+      blocking?.recovery
+      ?? RookRecoveryPolicy.decide(failure: category, capability: .spotify)
+    let base = blocking?.response
+    let pawnReports = quick.pawns.map {
+      PawnReport(
+        pawn: $0.pawn,
+        task: $0.task,
+        status: "blocked",
+        id: $0.id,
+        result: "Not started because its verified Spotify prerequisite was unavailable.",
+        evidence: ["Native task executor stopped at step \(blocking?.order ?? 0)."]
+      )
+    }
+    let response = RookResponse(
+      displayText: base?.displayText
+        ?? "**Spotify couldn’t finish the prerequisite.** \(detail)\n\nNext step: \(recovery.rationale)",
+      spokenText: base?.spokenText
+        ?? "I couldn’t verify the Spotify step. Check Rook for the exact next step.",
+      intent: base?.intent ?? "error",
+      requiresApproval: false,
+      queueItemIDs: [],
+      pawns: pawnReports,
+      canvas: base?.canvas ?? [spotifyTaskErrorCanvas(detail: detail)]
+    )
+    let archived = try? library.failTurn(
+      id: id,
+      command: displayCommand,
+      route: "spotify_hybrid",
+      displayText: response.displayText,
+      reason: detail,
+      pawns: pawnReports
+    )
+    let completed = RookResponse(
+      displayText: response.displayText,
+      spokenText: response.spokenText,
+      intent: response.intent,
+      requiresApproval: response.requiresApproval,
+      queueItemIDs: response.queueItemIDs,
+      pawns: archived?.pawns ?? response.pawns,
+      canvas: response.canvas
+    )
+    _ = dashboardModel.completeDeliberation(
+      completed,
+      command: displayCommand,
+      requestID: id
+    )
+    dashboardModel.refreshLibrary()
+    lastResponse = completed
+    persistLastResponse(completed, command: sourceCommand, route: "spotify_hybrid")
+    lastResponseMenuItem.isEnabled = true
+    setStatus(
+      completed.intent == "clarification"
+        ? "Waiting for one Spotify detail" : backgroundStatus(fallback: "Spotify needs attention")
+    )
+    speakResponse(completed.spokenText)
+    traceFailure(id: id, message: detail, capability: .spotify)
+  }
+
+  private func spotifyTaskErrorCanvas(detail: String) -> RookCanvasBlock {
+    RookCanvasBlock(
+      id: "spotify_task_error",
+      kind: .spotify,
+      title: "Spotify task",
+      subtitle: "Dependent work stopped",
+      asOf: ISO8601DateFormatter().string(from: Date()),
+      items: [
+        RookCanvasItem(
+          id: "spotify_task_issue",
+          label: "Native prerequisite",
+          detail: detail,
+          value: "Not verified",
+          symbol: .warning
+        )
+      ],
+      sourceLabel: "Spotify",
+      sourceURL: "https://open.spotify.com"
+    )
   }
 
   private func launchDeliberation(
@@ -1397,8 +2047,23 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     quick: QuickRookResponse,
     workspacePath: String?,
     screenCapture: RookScreenCaptureResult? = nil,
-    hybridPlan: RookHybridCapabilityPlan? = nil
+    hybridPlan: RookHybridCapabilityPlan? = nil,
+    taskExecution: RookTaskExecutionResult? = nil
   ) {
+    if quick.intent == "coding", hybridPlan == nil, taskExecution == nil {
+      launchCodingTask(
+        id: id,
+        displayCommand: displayCommand,
+        effectiveCommand: effectiveCommand,
+        workspacePath: workspacePath
+      )
+      return
+    }
+    traceAdapterStart(
+      id: id,
+      route: hybridPlan == nil ? "deliberate" : "hybrid",
+      adapter: hybridPlan?.requiresComputerOperator == true ? "central_rook_operator" : "central_rook_codex"
+    )
     let request = DeliberationRequest(
       id: id,
       displayCommand: displayCommand,
@@ -1406,7 +2071,8 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       quick: quick,
       workspacePath: workspacePath,
       screenCapture: screenCapture,
-      hybridPlan: hybridPlan
+      hybridPlan: hybridPlan,
+      taskExecution: taskExecution
     )
     activeDeliberations[id] = request
     dashboardModel.markDeliberationActive(requestID: id)
@@ -1426,17 +2092,29 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
           inputImageDescriptions: request.screenCapture.map {
             ["A fresh private local capture of \($0.targetLabel), attached as live visual evidence for this request."]
           } ?? [],
-          hybridPlan: request.hybridPlan
+          hybridPlan: request.hybridPlan,
+          taskExecution: request.taskExecution
         )
         DispatchQueue.main.async {
           self.activeDeliberations.removeValue(forKey: request.id)
+          let nativeResponse = request.taskExecution?.latestNativeResponse
+          let verifiedTrack = request.taskExecution?.verifiedEvidence
+            .compactMap { $0.evidence?.values["track"] }
+            .last
+          let shouldPrependNative =
+            nativeResponse != nil
+            && !(verifiedTrack.map { response.displayText.localizedCaseInsensitiveContains($0) } ?? false)
+          let completedDisplayText =
+            shouldPrependNative
+            ? "\(nativeResponse?.displayText ?? "")\n\n\(response.displayText)"
+            : response.displayText
           let archived: RookLibraryEntry?
           if response.intent == "error" {
             archived = try? self.library.failTurn(
               id: request.id,
               command: request.displayCommand,
               route: LocalRookDestination.deliberate.rawValue,
-              displayText: response.displayText,
+              displayText: completedDisplayText,
               reason: response.spokenText.isEmpty
                 ? "Rook reported that the request did not complete." : response.spokenText,
               pawns: response.pawns
@@ -1446,18 +2124,23 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
               id: request.id,
               command: request.displayCommand,
               route: LocalRookDestination.deliberate.rawValue,
-              displayText: response.displayText,
+              displayText: completedDisplayText,
               pawns: response.pawns
             )
           }
           var completedCanvas = response.canvas
+          if let nativeCanvas = nativeResponse?.canvas.first {
+            completedCanvas.removeAll { $0.id == nativeCanvas.id }
+            completedCanvas.insert(nativeCanvas, at: 0)
+            completedCanvas = Array(completedCanvas.prefix(3))
+          }
           if let capture = request.screenCapture {
             completedCanvas.removeAll { $0.kind == .image && $0.imageAssetID == capture.assetID }
             completedCanvas.insert(self.screenCaptureCanvas(for: capture), at: 0)
             completedCanvas = Array(completedCanvas.prefix(3))
           }
           let completedResponse = RookResponse(
-            displayText: response.displayText,
+            displayText: completedDisplayText,
             spokenText: response.spokenText,
             intent: response.intent,
             requiresApproval: response.requiresApproval,
@@ -1488,11 +2171,32 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
                 fallback: completedResponse.intent == "error" ? "Request blocked" : "Synthesis ready"
               ))
           self.speakResponse(completedResponse.spokenText)
+          if completedResponse.intent == "error" {
+            self.traceFailure(
+              id: request.id,
+              message: "\(completedResponse.displayText) \(completedResponse.spokenText)",
+              capability: request.hybridPlan?.centralCapabilities.first
+            )
+          } else {
+            self.traceExternalOutcome(
+              id: request.id,
+              route: request.hybridPlan == nil ? "deliberate" : "hybrid",
+              adapter: request.hybridPlan?.requiresComputerOperator == true
+                ? "central_rook_operator" : "central_rook_codex",
+              verified: false
+            )
+            self.finishTrace(id: request.id, outcome: .succeeded, verified: false)
+          }
         }
       } catch {
         DispatchQueue.main.async {
           self.activeDeliberations.removeValue(forKey: request.id)
           let reason = error.localizedDescription
+          self.traceFailure(
+            id: request.id,
+            message: reason,
+            capability: request.hybridPlan?.centralCapabilities.first
+          )
           let archived = try? self.library.failTurn(
             id: request.id,
             command: request.displayCommand,
@@ -1515,12 +2219,434 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
+  private func launchCodingTask(
+    id: UUID,
+    displayCommand: String,
+    effectiveCommand: String,
+    workspacePath: String?
+  ) {
+    guard let workspacePath else {
+      finishCodingWorkspaceClarification(id: id, displayCommand: displayCommand)
+      return
+    }
+
+    let request = CodingTaskRequest(
+      id: id,
+      displayCommand: displayCommand,
+      effectiveCommand: effectiveCommand,
+      workspacePath: workspacePath
+    )
+    do {
+      _ = try codingTaskStore.begin(
+        requestID: id,
+        command: effectiveCommand,
+        workspacePath: workspacePath
+      )
+    } catch {
+      finishCodingTaskFailure(request: request, error: error)
+      return
+    }
+
+    activeCodingTasks[id] = request
+    dashboardModel.markCodingTaskActive(
+      requestID: id,
+      workspaceName: URL(fileURLWithPath: workspacePath).lastPathComponent
+    )
+    traceAdapterStart(id: id, route: "codex_task", adapter: "full_codex_task")
+    setStatus(backgroundStatus())
+
+    let config = self.config!
+    let store = self.codingTaskStore!
+    let contextSnapshot = library.contextSnapshot(for: effectiveCommand)
+    deliberationQueue.async { [weak self] in
+      guard let self else { return }
+      do {
+        let result = try RookCodingTaskClient(config: config, store: store).run(
+          requestID: request.id,
+          command: request.effectiveCommand,
+          contextSnapshot: contextSnapshot,
+          workspacePath: request.workspacePath
+        ) { [weak self] progress in
+          DispatchQueue.main.async {
+            self?.handleCodingTaskProgress(progress, requestID: request.id)
+          }
+        }
+        DispatchQueue.main.async {
+          self.finishCodingTask(result, request: request)
+        }
+      } catch {
+        DispatchQueue.main.async {
+          self.finishCodingTaskFailure(request: request, error: error)
+        }
+      }
+    }
+  }
+
+  private func handleCodingTaskProgress(_ progress: RookCodingTaskProgress, requestID: UUID) {
+    guard activeCodingTasks[requestID] != nil else { return }
+    dashboardModel.updateCodingTaskProgress(
+      requestID: requestID,
+      label: progress.detail,
+      taskID: progress.threadID.map { String($0.prefix(8)) }
+    )
+    setStatus(backgroundStatus())
+  }
+
+  private func finishCodingTask(_ result: RookCodingTaskResult, request: CodingTaskRequest) {
+    guard activeCodingTasks.removeValue(forKey: request.id) != nil else { return }
+    let taskLabel = String(result.threadID.prefix(8))
+    let workspaceName = URL(fileURLWithPath: result.workspacePath).lastPathComponent
+    let displayText = """
+      \(result.finalText)
+
+      ---
+      Codex task `\(taskLabel)` is saved in the Codex task list · checkout: `\(workspaceName)`
+      """
+    let response = RookResponse(
+      displayText: displayText,
+      spokenText: "The Codex task finished. Its complete result is on screen.",
+      intent: "coding",
+      requiresApproval: false,
+      queueItemIDs: [],
+      pawns: [],
+      canvas: [
+        RookCanvasBlock(
+          id: "codex_task",
+          kind: .code,
+          title: "Codex task",
+          subtitle: "Full coding task in the verified checkout",
+          items: [
+            RookCanvasItem(
+              id: "codex_thread",
+              label: "Task",
+              detail: "Saved for inspection and continuation in Codex",
+              value: taskLabel,
+              symbol: .code
+            ),
+            RookCanvasItem(
+              id: "codex_workspace",
+              label: "Checkout",
+              detail: "Live project workspace",
+              value: workspaceName,
+              symbol: .code
+            ),
+          ]
+        )
+      ]
+    )
+    let archived = try? library.finishTurn(
+      id: request.id,
+      command: request.displayCommand,
+      route: "codex_task",
+      displayText: displayText,
+      pawns: []
+    )
+    let completed = RookResponse(
+      displayText: response.displayText,
+      spokenText: response.spokenText,
+      intent: response.intent,
+      requiresApproval: response.requiresApproval,
+      queueItemIDs: response.queueItemIDs,
+      pawns: archived?.pawns ?? [],
+      canvas: response.canvas
+    )
+    let isLatest = dashboardModel.completeDeliberation(
+      completed,
+      command: request.displayCommand,
+      requestID: request.id
+    )
+    dashboardModel.refreshLibrary()
+    if isLatest {
+      lastResponse = completed
+      persistLastResponse(completed, command: request.effectiveCommand, route: "codex_task")
+      lastResponseMenuItem.isEnabled = true
+      speakResponse(completed.spokenText)
+    }
+    traceExternalOutcome(
+      id: request.id,
+      route: "codex_task",
+      adapter: "full_codex_task",
+      verified: false
+    )
+    finishTrace(id: request.id, outcome: .succeeded, verified: false)
+    setStatus(backgroundStatus())
+  }
+
+  private func finishCodingTaskFailure(request: CodingTaskRequest, error: Error) {
+    activeCodingTasks.removeValue(forKey: request.id)
+    _ = try? codingTaskStore.fail(requestID: request.id, reason: error.localizedDescription)
+    let response = RookResponse(
+      displayText: "The Codex coding task could not finish. \(error.localizedDescription)",
+      spokenText: "The Codex task was blocked. The exact reason is on screen.",
+      intent: "error",
+      requiresApproval: false,
+      queueItemIDs: [],
+      pawns: []
+    )
+    let archived = try? library.failTurn(
+      id: request.id,
+      command: request.displayCommand,
+      route: "codex_task",
+      displayText: response.displayText,
+      reason: error.localizedDescription,
+      pawns: []
+    )
+    _ = dashboardModel.completeDeliberation(
+      response,
+      command: request.displayCommand,
+      requestID: request.id
+    )
+    dashboardModel.refreshLibrary()
+    lastResponse = response
+    persistLastResponse(response, command: request.effectiveCommand, route: "codex_task")
+    lastResponseMenuItem.isEnabled = true
+    setStatus(backgroundStatus(fallback: "Codex task blocked"))
+    speakResponse(response.spokenText)
+    traceFailure(id: request.id, message: error.localizedDescription, capability: nil)
+    _ = archived
+  }
+
+  private func finishCodingWorkspaceClarification(id: UUID, displayCommand: String) {
+    let response = RookResponse(
+      displayText: "Which project or checkout should Codex use? I won't start coding work in a guessed workspace.",
+      spokenText: "Which project should Codex use?",
+      intent: "clarification",
+      requiresApproval: false,
+      queueItemIDs: [],
+      pawns: []
+    )
+    _ = try? library.failTurn(
+      id: id,
+      command: displayCommand,
+      route: "codex_task",
+      displayText: response.displayText,
+      reason: "No unique verified coding workspace was resolved.",
+      pawns: []
+    )
+    _ = dashboardModel.completeDeliberation(response, command: displayCommand, requestID: id)
+    dashboardModel.refreshLibrary()
+    lastResponse = response
+    persistLastResponse(response, command: displayCommand, route: "codex_task")
+    lastResponseMenuItem.isEnabled = true
+    setStatus(backgroundStatus(fallback: "Waiting for project"))
+    speakResponse(response.spokenText)
+    traceFailure(id: id, message: "No unique verified coding workspace was resolved.", capability: nil)
+  }
+
+  private func beginTrace(
+    id: UUID,
+    source: RookTaskInputSource,
+    command: String = ""
+  ) {
+    _ = try? traceRecorder.begin(id: id, source: source, command: command)
+  }
+
+  private func trace(
+    id: UUID,
+    stage: RookTaskTraceStage,
+    status: RookTaskTraceEventStatus = .informational,
+    component: String,
+    detail: String = "",
+    metadata: [String: String] = [:],
+    command: String? = nil,
+    effectiveCommand: String? = nil,
+    route: String? = nil,
+    adapter: String? = nil
+  ) {
+    try? traceRecorder.record(
+      id: id,
+      stage: stage,
+      status: status,
+      component: component,
+      detail: detail,
+      metadata: metadata,
+      command: command,
+      effectiveCommand: effectiveCommand,
+      route: route,
+      adapter: adapter
+    )
+  }
+
+  private func traceAdapterStart(id: UUID, route: String, adapter: String) {
+    trace(
+      id: id,
+      stage: .adapterStarted,
+      status: .started,
+      component: adapter,
+      detail: "Execution adapter started.",
+      route: route,
+      adapter: adapter
+    )
+  }
+
+  private func traceTaskStepEvent(id: UUID, event: RookTaskStepEvent) {
+    let step = event.step
+    let metadata = [
+      "attempt": String(step.attemptCount),
+      "state": step.state.rawValue,
+      "step": String(step.order),
+      "verified": String(step.verified),
+    ]
+    switch event.kind {
+    case .started:
+      trace(
+        id: id,
+        stage: .adapterStarted,
+        status: .started,
+        component: "spotify_web_api",
+        detail: step.clause,
+        metadata: metadata,
+        route: "hybrid",
+        adapter: "rook_task_executor"
+      )
+    case .retrying:
+      trace(
+        id: id,
+        stage: .recoverySelected,
+        status: .started,
+        component: "recovery_policy",
+        detail: step.recovery?.rationale ?? step.detail,
+        metadata: metadata.merging([
+          "action": step.recovery?.action.rawValue ?? RookRecoveryAction.retrySameAdapter.rawValue,
+          "failure": step.failureCategory?.rawValue ?? RookFailureCategory.unknown.rawValue,
+        ]) { _, new in new }
+      )
+    case .succeeded:
+      trace(
+        id: id,
+        stage: .externalOutcome,
+        status: .succeeded,
+        component: "spotify_web_api",
+        detail: step.detail,
+        metadata: metadata,
+        route: "hybrid",
+        adapter: "rook_task_executor"
+      )
+      if step.verified {
+        trace(
+          id: id,
+          stage: .confirmation,
+          status: .succeeded,
+          component: "rook_task_executor",
+          detail: "Verified native result accepted for dependent step \(step.order).",
+          metadata: metadata
+        )
+      }
+    case .blocked, .failed, .skipped:
+      trace(
+        id: id,
+        stage: .externalOutcome,
+        status: event.kind == .blocked ? .blocked : .failed,
+        component: step.owner == .central ? "spotify_web_api" : "dependency_gate",
+        detail: step.detail,
+        metadata: metadata.merging([
+          "failure": step.failureCategory?.rawValue ?? RookFailureCategory.unknown.rawValue
+        ]) { _, new in new },
+        route: "hybrid",
+        adapter: "rook_task_executor"
+      )
+    case .ready:
+      trace(
+        id: id,
+        stage: .confirmation,
+        status: .succeeded,
+        component: "dependency_gate",
+        detail: "Dependent step \(step.order) may start from verified prerequisites.",
+        metadata: metadata
+      )
+    }
+  }
+
+  private func traceExternalOutcome(
+    id: UUID,
+    route: String,
+    adapter: String,
+    verified: Bool,
+    status: RookTaskTraceEventStatus = .succeeded
+  ) {
+    trace(
+      id: id,
+      stage: .externalOutcome,
+      status: status,
+      component: adapter,
+      detail: verified ? "Verified outcome received." : "Outcome received without verification.",
+      metadata: ["verified": String(verified)],
+      route: route,
+      adapter: adapter
+    )
+    if verified {
+      trace(
+        id: id,
+        stage: .confirmation,
+        status: .succeeded,
+        component: "orchestrator",
+        detail: "Verified result accepted for user confirmation."
+      )
+    }
+  }
+
+  private func traceFailure(
+    id: UUID,
+    message: String,
+    capability: RookDirectCapabilityID?
+  ) {
+    let category = RookFailureClassifier.classify(message)
+    let recovery = RookRecoveryPolicy.decide(
+      failure: category,
+      capability: capability
+    )
+    trace(
+      id: id,
+      stage: .externalOutcome,
+      status: category == .policyBlocked ? .blocked : .failed,
+      component: capability?.rawValue ?? "orchestrator",
+      detail: category.rawValue,
+      metadata: ["verified": "false"]
+    )
+    trace(
+      id: id,
+      stage: .recoverySelected,
+      status: .informational,
+      component: "recovery_policy",
+      detail: recovery.rationale,
+      metadata: [
+        "action": recovery.action.rawValue,
+        "failure": category.rawValue,
+        "retry_limit": String(recovery.retryLimit),
+      ]
+    )
+    let outcome: RookTaskOutcomeStatus
+    switch category {
+    case .ambiguity:
+      outcome = .clarified
+    case .authentication, .permission, .policyBlocked, .dependencyFailed:
+      outcome = .blocked
+    default:
+      outcome = .failed
+    }
+    try? traceRecorder.finish(
+      id: id,
+      outcome: outcome,
+      verified: false,
+      failureCategory: category,
+      detail: recovery.action.rawValue
+    )
+  }
+
+  private func finishTrace(id: UUID, outcome: RookTaskOutcomeStatus, verified: Bool) {
+    try? traceRecorder.finish(id: id, outcome: outcome, verified: verified)
+  }
+
   private func backgroundStatus(fallback: String = "Ready") -> String {
     var work: [String] = []
     let answerCount = activeStreamingRequests.count
+    let centralCount = activeCentralDelegations.count
     let crewCount = activeDeliberations.count
+    let codingCount = activeCodingTasks.count
     if answerCount > 0 { work.append("\(answerCount) live answer\(answerCount == 1 ? "" : "s")") }
+    if centralCount > 0 { work.append("\(centralCount) Central decision\(centralCount == 1 ? "" : "s")") }
     if crewCount > 0 { work.append("\(crewCount) crew\(crewCount == 1 ? "" : "s") working") }
+    if codingCount > 0 { work.append("\(codingCount) Codex task\(codingCount == 1 ? "" : "s")") }
     return work.isEmpty ? fallback : "Ready · " + work.joined(separator: " · ")
   }
 
@@ -1540,7 +2666,9 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
       force || !library.isCheckpointFresh(),
       force || (lastLibrarianAttempt.map({ Date().timeIntervalSince($0) >= 300 }) ?? true),
       activeStreamingRequests.isEmpty,
+      activeCentralDelegations.isEmpty,
       activeDeliberations.isEmpty,
+      activeCodingTasks.isEmpty,
       !isSpeakingResponse,
       dashboardModel.voicePhase == .waiting || dashboardModel.voicePhase == .paused
     else { return }
@@ -1678,6 +2806,17 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     let enable = !voice.listeningEnabled
     voice.setListening(enabled: enable)
     listeningMenuItem.title = enable ? "Pause Listening" : "Resume Listening"
+  }
+
+  @objc private func toggleFluidTranscriptionTrial() {
+    let enable = !voice.fluidTranscriptionTrialEnabled
+    voice.setFluidTranscriptionTrial(enabled: enable)
+    fluidTranscriptionMenuItem.state = enable ? .on : .off
+    setStatus(
+      enable
+        ? "FluidAudio transcription trial on — preparing locally"
+        : "FluidAudio trial off — Apple transcription active"
+    )
   }
 
   @objc private func requestVoicePermissions() {
@@ -1911,7 +3050,21 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     bridge.resetConversation()
     pendingConversationStore.clear()
     streamingClient?.stop()
-    streamingClient?.start()
+    for (id, command) in activeCentralDelegations {
+      _ = try? library.failTurn(
+        id: id,
+        command: command,
+        route: "central_delegation",
+        displayText: "Rook started a fresh conversation before this decision finished.",
+        reason: "The Central Rook delegation was cancelled by a conversation reset.",
+        pawns: [],
+        interrupted: true
+      )
+    }
+    activeCentralDelegations.removeAll()
+    dashboardModel.refreshLibrary()
+    centralDelegationClient?.stop()
+    centralDelegationClient?.start()
     promptPolishClient?.stop()
     promptPolishClient?.start()
     setStatus("Fresh conversation ready")
@@ -1968,6 +3121,7 @@ final class RookAppDelegate: NSObject, NSApplicationDelegate {
     weatherService?.stop()
     try? library?.recoverInterrupted(reason: "Rook quit before this request finished.")
     streamingClient?.stop()
+    centralDelegationClient?.stop()
     promptPolishClient?.stop()
   }
 }

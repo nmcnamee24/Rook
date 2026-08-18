@@ -62,30 +62,33 @@ The private macOS Rook Core may invoke this skill through the locally authentica
 
 ## Phase 2D instant Rook and silent pawns
 
-The native Rook Core uses a local-first conversation path by default:
+The native Rook Core uses a thin exact gate followed by Central Rook:
 
-1. A deterministic on-device router responds immediately, handles a small set of common conversational checks, and classifies the request without waiting for a model.
-2. Stable ordinary questions use a prewarmed, read-only Codex app-server thread with low reasoning and no tools. Display its answer token-by-token as it arrives.
-3. Live, uncertain, consequential, file-backed, or multi-step work bypasses the ordinary-answer model and starts an independent high-reasoning background session immediately.
-4. The background central Rook gives each deliberate prompt its own bounded crew of up to ten pawn instances, evaluates their summaries, and produces one cohesive synthesis. All five task roles are available to every prompt, and roles may repeat when independent subtasks need separate specialists.
+1. Deterministic local code resolves open continuations and only exact, typed conversational or native fast paths. It is a gate, not the delegator, and must not classify new semantic work from keywords.
+2. Every unclaimed, semantic, compound, uncertain, or declined request goes intact to one prewarmed, read-only Central Rook delegator. That pass understands the full intended outcome and returns a structured choice: answer now, ask one clarification, or begin deliberate work with an optional pawn plan.
+3. The delegator itself never uses tools or takes action. Work-bearing requests start an independent high-reasoning Central Rook session, which owns native capabilities, tools, dependencies, safety gates, and completion.
+4. Deep Central Rook may give each prompt its own bounded crew of up to ten pawn instances, evaluates their summaries, and produces one cohesive synthesis. All five task roles are available, optional, and repeatable for genuinely independent subtasks.
 
-- Local Rook must not claim it inspected a source or completed work that has not happened. For routed work it gives a natural acknowledgment and shows the planned crew immediately.
-- The streamed ordinary-answer thread must never use tools, apps, skills, web search, files, shell commands, subagents, or external actions.
+- Neither the exact gate nor the Central delegator may claim it inspected a source or completed work that has not happened. A deliberate handoff gives only a natural acknowledgment.
+- The Central delegator must never use tools, apps, skills, web search, files, shell commands, subagents, or external actions.
 - Pawns are a silent workforce. Never expose their raw reasoning, transcripts, or direct messages, and never let a pawn speak through text-to-speech.
 - Only central Rook owns user-visible answers, completion announcements, approval requests, and final synthesis.
 - Keep the voice listener available after the local reply while streaming or background deliberation continues. Run routed prompts in independent deep sessions so different crews can work concurrently; do not serialize every prompt behind one shared pawn queue.
-- Preserve all action boundaries in every stage. The local and streamed ordinary-answer stages perform no writes. Only central background Rook may perform guarded Calendar create/update and Gmail-draft writes; pawns perform none.
+- Preserve all action boundaries in every stage. The exact gate and Central delegation pass perform no writes. Only deep Central Rook may perform guarded Calendar create/update and Gmail-draft writes; pawns perform none.
 
 ## Phase 2E voice readiness
 
-The native Rook Core uses the macOS 26 on-device SpeechAnalyzer and SpeechTranscriber stack for wake detection and command transcription.
+The native Rook Core prefers a validated Rook-owned local LiveKit WakeWord ONNX detector for “Rook” and retains the macOS 26 on-device SpeechAnalyzer and SpeechTranscriber stack continuously for command transcription. Apple wake matching is a labeled compatibility fallback when the local runtime or validated model is unavailable.
 
 - The idle instruction is `Just say “Rook”`. Do not speak a separate “Ready” prompt.
+- Treat the owned detector as active only when the local runtime, private model, SHA-256-bound passing corpus report, and runtime probe are all ready. Never describe Apple fallback as the final reliability path.
 - After the wake word, retain one continuous audio/transcription session so the first words of the command are not lost during a recognizer restart.
+- Keep the bounded wake pre-roll in memory only. The local helper may emit readiness, phrase, and timing events, but never persist or transmit ambient audio.
 - Expose wake detected, capturing, silence-to-send progress, processing, and speaking as distinct UI states. The capture ring must reset on detected voice activity and complete after the configured quiet interval.
 - After capture, run the on-device prompt cleanup immediately. It removes common fillers and restarts while preserving actions, constraints, facts, names, numbers, paths, URLs, code tokens, quotations, uncertainty, and negations. The optional model rewrite remains off by default unless a verified model can consistently finish inside its configured subsecond budget; never let polishing answer, execute, or inherit content from another prompt.
 - Keep raw audio on device and do not persist ambient transcripts. Only the command following a recognized leading wake word reaches Rook.
 - Preserve a typed-command fallback for Wispr Flow or keyboard dictation without depending on a Wispr API.
+- Do not claim whisper/noise reliability from implementation alone. Require the recorded quiet, whisper, continuous-command, office-noise, coffee-shop-noise, far-field, and negative corpus to meet the documented recall and false-activation gates.
 
 ## Phase 2J Library and proactive context
 
@@ -132,7 +135,7 @@ The native Rook Core has a two-layer macOS control path.
 
 ## Phase 2N Instant weather
 
-- Straightforward current, tomorrow, and one-to-seven-day forecast requests use the native weather path before routing. They must not deploy pawns or wait for a language model.
+- Exact current, tomorrow, and one-to-seven-day forecast commands use the native weather path before Central Rook. Natural, contextual, compound, or decision-oriented weather language remains intact for Central Rook rather than receiving a keyword-based guess.
 - Native weather uses Open-Meteo with Fahrenheit, mph, automatic local timezone, a two-second request budget, an eight-minute background refresh, and a ten-minute live cache. A recent cached forecast may be shown for up to two hours during a brief service failure, with its explicit as-of time preserved.
 - For an unqualified local forecast, use approximate Core Location only after permission and keep cached coordinates in Rook's private state. If permission is unavailable, ask for a city in the error response rather than starting slow research.
 - Named-city requests may use Open-Meteo geocoding and then the forecast endpoint. Keep the visible location label, source, as-of time, and native weather Canvas.
@@ -157,7 +160,7 @@ The native Rook Core has a two-layer macOS control path.
 - Every model-backed answer receives a bounded newest-first conversation thread in addition to query-ranked Library history. A topic change must not erase the prior task, and a new topic must not be mistaken for approval of an older action.
 - When central Rook or a native route asks for a missing detail, persist one private open-question record containing the source request, exact question, bounded visible choices, routing domain, and a 30-minute expiry. Resolve the next clear answer against this record before prompt polishing, parsers, Computer Control, models, or pawns. Clear it on completion, cancellation, expiry, or a recognizable new request.
 - Typed follow-ups must return to their reviewed native adapter. A playlist name, ordinal choice, or `my top tracks playlist` after a Spotify playlist question stays on the Spotify API path and deploys no pawns. Generic answers carry the source request and unanswered question into central Rook; do not ask what a short answer means in isolation.
-- Treat study, work, and focus playlist requests semantically rather than as literal names. Rank the connected user's playlist titles and Spotify descriptions, show only the strongest bounded matches, and keep those choices available for `play that`, `the first one`, `option one`, `choice two`, `playlist 3`, or an exact-name follow-up. If the requested literal name is absent, try this personal-library ranking before reporting no match. Ask when the leading candidates are genuinely tied; do not dump the full library or deploy a pawn for this classification.
+- Within an exact typed Spotify request or an already-open Spotify follow-up, treat study, work, and focus intent semantically rather than as a literal playlist name. Rank the connected user's playlist titles and Spotify descriptions, show only the strongest bounded matches, and keep those choices available for `play that`, `the first one`, `option one`, `choice two`, `playlist 3`, or an exact-name follow-up. New phrasing outside the exact gate goes to Central Rook intact. Ask when the leading candidates are genuinely tied; do not dump the full library.
 - `Never mind`, `cancel that`, and equivalent phrases drop the open question. `Try that again` reruns its source request. A clear topic switch routes as a new request and must not be treated as an answer or approval.
 - `Play my Spotify`, `open Spotify and play my music`, pause, resume, next, and previous are narrow native controls. They use no model and deploy no pawns. Named playlists and Spotify account data may use a separately authorized Spotify integration, but basic playback must not depend on Spotify API sign-in.
 
@@ -175,7 +178,7 @@ The native Rook Core has a two-layer macOS control path.
 - When Spotify OAuth is connected, exact named playlist or catalog playback, playlist lists, recent listening, top tracks or artists, now-playing state, available devices, and playback transfer use the native Spotify client before any model, tool, or pawn route.
 - When Spotify OAuth is connected, basic resume, pause, next, and previous commands also use the native Spotify client. Use the narrow Mac control only as the disconnected fallback; a connected Spotify request must never ask for Computer Control permission.
 - Treat a repeated Spotify clause joined by “or” as a likely voice correction only when both sides explicitly name Spotify. Prefer the final supported clause; otherwise ask for clarification instead of interpreting the whole phrase as an application name.
-- Treat operational Spotify language as an authoritative native domain before Computer Control or general model routing. After the exact fast parser misses, run the bounded semantic Spotify resolver and execute its reviewed native intent against the matching Spotify endpoint. Natural variants such as “what are my playlists,” “my most played songs,” and a named playlist without the word Spotify stay native. An unspecified playlist calls the playlist endpoint, shows choices, and asks for the exact name. An ambiguous or unsupported Spotify-only operation stops with one local clarification; an explicit cross-domain request may instead become a reviewed hybrid plan.
+- Treat only exact, typed Spotify commands as native fast paths before Central Rook. If the exact parser misses, preserve the whole request for Central Rook; do not run a keyword or semantic second-chance router, execute a partial intent, or silently switch to Computer Control. Exact unspecified-playlist commands may still call the playlist endpoint and ask for a name. Ambiguous, unsupported, natural, or cross-domain Spotify language belongs to Central Rook.
 - Direct Spotify uses the fixed `http://127.0.0.1:8888/oauth/callback` loopback URI accepted by the provider dashboard. Keep PKCE, state validation, Keychain-only tokens, and the no-client-secret boundary intact.
 - Resolve named playback from the user's own playlists first, then use Spotify catalog search. If two high-confidence matches remain genuinely tied, ask for the exact name instead of choosing silently.
 - Playback requests select the active unrestricted Spotify Connect device first, then another unrestricted available device. If no usable device exists, ask the user to open Spotify on a Mac, phone, or speaker.
@@ -193,18 +196,45 @@ The native Rook Core has a two-layer macOS control path.
 
 ## Phase 2T direct capability guide
 
-- Before Reflex, the direct-capability guide, an ordinary model, Computer Operator, or any task pawn, run Rook's context-aware inference preflight. It must decide whether the utterance is a continuation or retry, one semantic native action, a genuine hybrid request, a deliberate task, or an unresolved reference. Never let a literal parser execute words such as `that`, `it`, or `option one` as a provider item name.
+- Before the exact capability gate or Central Rook, run the context-aware continuity preflight. It resolves open answers, exact retries, approval follow-ups, and unique recent referents. It must not classify a new request as a semantic native action, invent a pawn crew, or split compound work. Never let a literal parser execute words such as `that`, `it`, or `option one` as a provider item name.
 - After inference resolves the intended command and its context, consult the native direct-capability guide in this order: Rook Reflex, weather, Spotify, private screen capture, narrow Mac controls, then a fresh Librarian checkpoint.
-- Treat this guide as the authoritative behind-the-scenes cheat sheet. Each capability must name its adapter, bounded supported work, and fallback so adding a native feature cannot leave its keywords routed as generic research.
-- Run exact bounded parsers first. When a request plausibly belongs to weather or Spotify but the exact parser misses, try the reviewed semantic resolver against the same native intent and authority boundaries.
-- Treat idiomatic same-domain compounds such as `find and play me a study playlist` as one Spotify action before clause splitting. Reserve hybrid plans for genuinely distinct work such as app control plus research. A later `play that Spotify playlist` should resolve the unique recent selected playlist before it reaches Spotify; if no unique referent exists, ask locally instead of searching for the word `that`.
-- If a known direct adapter declines the request, preserve the complete command and escalate it to deliberate central Rook with an appropriate pawn crew. Never execute only the matching fragment of an ambiguous or compound request.
-- The capability guide is compositional rather than mutually exclusive. When an explicit compound request contains at least one central-only capability clause and at least one independent specialist clause, create one ordered hybrid plan instead of choosing only the first matching route.
-- In a hybrid plan, central Rook owns every native API, Computer Use, screen capture, external action, approval boundary, and final synthesis. Pawns receive only independent research, code, drafting, inbox/Calendar inspection, or verification clauses and still cannot click, type, launch, control playback, or take another external action.
-- Preserve the user's sequence. Independent pawn work may run in parallel, but a clause introduced by `then` or otherwise dependent on a central result must wait. Never pass private screen contents to a pawn merely because the next clause asks for analysis.
-- A fully supported native compound such as `open Spotify and play my music` remains instant and zero-pawn. Hybrid planning is for mixed ownership such as `open Spotify and research the artist playing right now` or `inspect the app, then have an Auditor verify the outcome`.
+- Treat this guide as an exact fast-path cheat sheet, not as Rook's delegator. Each capability names its adapter and bounded grammar. A parser may bypass Central only when the complete request is an exact supported operation.
+- When no exact parser claims the complete request, send it intact to the prewarmed Central Rook delegator. Central decides whether to answer, clarify, or start deep work and whether specialists materially help. The local gate never assigns pawns from nouns, verbs, domains, conjunctions, or role names.
+- If an exact adapter declines, preserve the complete command and send it back through Central Rook. Never execute only a matching fragment, guess a replacement adapter, or preselect a crew.
+- A later `play that Spotify playlist` may use a unique recent selected playlist before it reaches the gate; if no unique referent exists, ask locally instead of searching for the word `that`.
+- Central Rook owns every non-exact native-equivalent capability, Computer Use step, external action, approval boundary, dependency, and final synthesis. Pawns receive only independent research, code, drafting, inbox or Calendar inspection, or verification work and still cannot click, type, launch, control playback, or take another external action.
+- Preserve the user's sequence in deep work. Independent pawn work may run in parallel, but a clause introduced by `then` or otherwise dependent on a Central result must wait. Never pass private screen contents to a pawn merely because the next clause asks for analysis.
+- The older ordered hybrid planner and native task executor exist only to safely resume an already-open Spotify workflow. They must not classify a new compound request before Central Rook.
 - Prefer one local clarification for tied Spotify matches, missing names, or unsupported Spotify mutations. Missing OAuth, location permission, playback devices, provider availability, or another setup failure that a pawn cannot repair should return the exact local next step rather than wasting a research run.
-- Weather alerts, warnings, radar, air quality, comparisons, safety decisions, travel decisions, and unsupported time ranges still escalate because the raw native forecast is insufficient. Straightforward forecast wording such as `will it rain tomorrow?`, `do I need an umbrella?`, or `how cold is it in Boston?` stays direct and zero-pawn.
+- Weather alerts, warnings, radar, air quality, comparisons, safety decisions, travel decisions, unsupported time ranges, and natural forecast phrasing go through Central Rook because the exact gate must not infer that a raw forecast is sufficient.
+
+## Phase 2U task deliberation and recovery
+
+- Give each request one stable private request ID from wake or typed submission through final confirmation. Record monotonic milestones for transcript readiness, intent and route selection, adapter start, external outcome, verification, failure category, recovery selection, and completion. Keep traces private and never include credentials, tokens, raw provider payloads, private screen contents, or unnecessary message bodies.
+- Interpret the user's intended outcome and explicit constraints before choosing an executor. Produce the smallest sufficient plan: do not over-plan one native action, and do not collapse a genuinely dependent multi-step outcome into vague generic work.
+- Every plan step has one owner: a reviewed Reflex/native adapter, central Rook, or pawn-eligible specialist work. Represent dependencies explicitly and do not start a dependent pawn until the prerequisite result has been verified and supplied safely.
+- Classify failures before responding or recovering. Distinguish ambiguity, authentication, permission, provider unavailability, timeout, rate limiting, adapter decline, policy block, dependency failure, execution failure, and verification failure. Never translate a timeout into a permission denial or a policy block without evidence.
+- Ask the smallest clarification for ambiguity. Give the exact setup step for authentication or permission. Preserve approval gates for policy blocks. Retry a transient failure on the same authoritative adapter at most once and only when repeating the action cannot duplicate or compound its effect. Stop dependent work when its prerequisite failed.
+- Never silently route a supported Spotify, weather, Reflex, or narrow computer action through Computer Use after failure. Escalation is for diagnosis and a reviewed next step; it does not change capability ownership or expand authority.
+- Learn from outcomes conservatively. Repeated verified traces may justify a proposed, versioned routing rule and regression test. One failure never rewrites behavior, stores a hidden permanent preference, broadens permissions, or authorizes a different executor.
+
+## Phase 2V native task execution
+
+- When resuming an already-open hybrid conversation whose central steps are supported Spotify operations, run those steps through the native task executor before starting dependent research. This compatibility path does not route new requests. Keep explicit pending, running, succeeded, failed, blocked, and skipped state for every step.
+- Issue each playback mutation once. Verify it with bounded read-only Spotify player checks, reject stale pre-command track or context state, and never repeat a mutation whose provider outcome is uncertain. A single read-only verification retry is allowed.
+- Release a dependent Scout only after its direct prerequisite succeeded with verified evidence. Supply only the bounded track, artist, device, playback state, and Spotify source receipt; never supply access tokens, account identifiers, raw responses, or unrelated listening data.
+- Do not repeat a native step that the host receipt marks succeeded. Do not use Computer Use to re-check or recover a supported Spotify step. If authentication, device availability, ambiguity, rate limiting, or verification blocks the native step, preserve that category and stop every dependent step.
+- If Rook asks which playlist to use during a hybrid request, preserve the entire unfinished request. Resolve the short answer through the native playlist resolver, resume playback and verification, and then continue the original dependent research rather than completing only the playlist action.
+- This executor does not claim generic ownership of other hybrid capabilities. Until a capability has its own typed adapter, verification criteria, safe retry rule, and regression coverage, leave it on the existing central Rook path.
+
+## Phase 2W full Codex coding handoff
+
+- Central Rook remains the single semantic front door. When the intended outcome is to inspect, change, debug, test, or verify code or repository files, the Central delegator returns the dedicated `coding` intent with no task pawns. Rook must not build or maintain a weaker parallel coding agent.
+- Resolve one live project checkout through the Library graph and verify that it exists under the user's home folder before starting. If no unique checkout is known, ask which project to use; never default code work to Rook's private state directory or a stale archived path.
+- Start one non-ephemeral full Codex task in that checkout. Let it inherit the user's normal Codex model, tools, skills, repository instructions, and configuration instead of forcing Rook's background model or structured response schema. Keep the task repository-scoped with workspace-write sandboxing and do not grant new external authority from the handoff.
+- Persist the Rook request ID, Codex thread ID, checkout, status, final summary, and exact failure or interruption reason under private Rook state. Show the task as Codex-owned work in Activity, keep its progress summaries generic and non-sensitive, and present the final Codex result through central Rook.
+- The saved Codex thread is the authoritative coding history and continuation point. Pawns may still research or audit genuinely independent non-coding work, but Forge must not duplicate or shadow the full Codex task.
+- Do not claim direct-Codex equivalence from routing alone. Compare the same real prompt and checkout through both paths and measure correctness, completeness, elapsed time, verification, and required user intervention.
 
 ## Output style
 

@@ -106,6 +106,11 @@ struct RookPawnRun: Identifiable, Codable, Equatable {
   let startedAt: Date
   var updatedAt: Date
   var failureReason: String? = nil
+  var kind: String? = nil
+  var taskID: String? = nil
+  var workspaceName: String? = nil
+
+  var isCodexTask: Bool { kind == "codex_task" }
 }
 
 struct RookMobileBridgeState: Equatable {
@@ -125,7 +130,7 @@ private struct RookPawnRunDocument: Codable {
 final class RookDashboardModel: ObservableObject {
   enum Section: String, CaseIterable, Identifiable {
     case today = "Today"
-    case pawns = "Pawns"
+    case pawns = "Activity"
     case library = "Library"
     case allies = "Allies"
     case queue = "Moves"
@@ -148,6 +153,7 @@ final class RookDashboardModel: ObservableObject {
   @Published private(set) var audioLevels: [CGFloat] = Array(repeating: 0.04, count: 44)
   @Published private(set) var voicePhase: RookVoicePhase = .waiting
   @Published private(set) var captureProgress: CGFloat = 0
+  @Published private(set) var wakeEngineState: RookWakeEngineState = .apple
   @Published private(set) var pawnRuns: [RookPawnRun] = []
   @Published private(set) var libraryEntries: [RookLibraryEntry] = []
   @Published private(set) var libraryGraph = RookLibraryGraph()
@@ -189,6 +195,7 @@ final class RookDashboardModel: ObservableObject {
     self.config = config
     self.previewMode = previewMode
     self.library = try? RookLibrary(config: config)
+    wakeEngineState = config.wakeEngine == "livekit" ? .personalizedStarting : .apple
     if previewMode {
       seedPreviewState()
     } else {
@@ -235,7 +242,20 @@ final class RookDashboardModel: ObservableObject {
   var voiceDetail: String {
     switch voicePhase {
     case .waiting:
-      return "On-device wake and transcription"
+      switch wakeEngineState {
+      case .personalizedTrial:
+        return "Unvalidated local wake trial and on-device transcription"
+      case .personalizedReady:
+        return "Personalized local wake and on-device transcription"
+      case .personalizedStarting:
+        return "Starting personalized local wake"
+      case .appleFallback(let reason):
+        return "Apple wake fallback — \(reason)"
+      case .unavailable(let reason):
+        return reason
+      case .apple:
+        return "Apple on-device wake and transcription"
+      }
     case .wakeDetected:
       return "Start talking — your voice is being tracked"
     case .capturing:
@@ -275,6 +295,10 @@ final class RookDashboardModel: ObservableObject {
 
   var completedPawnCount: Int {
     pawnRuns.reduce(0) { $0 + $1.pawns.filter { $0.status == "completed" }.count }
+  }
+
+  var completedWorkCount: Int {
+    pawnRuns.filter { $0.status == .completed }.count
   }
 
   var hasActivePawnRuns: Bool { !activePawnRuns.isEmpty }
@@ -521,6 +545,10 @@ final class RookDashboardModel: ObservableObject {
     systemStatus = value
   }
 
+  func updateWakeEngineState(_ value: RookWakeEngineState) {
+    wakeEngineState = value
+  }
+
   func noteCommand(_ value: String) {
     let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !cleaned.isEmpty else { return }
@@ -538,6 +566,9 @@ final class RookDashboardModel: ObservableObject {
 
   func presentLocal(_ decision: LocalRookDecision, requestID: UUID, command: String) {
     let response = decision.response
+    if decision.destination != .stream {
+      streamingText.removeValue(forKey: requestID)
+    }
     latestRequestID = requestID
     latestCommand = command
     responseText = response.displayText
@@ -567,7 +598,8 @@ final class RookDashboardModel: ObservableObject {
           status: .queued,
           pawns: reports,
           startedAt: Date(),
-          updatedAt: Date()
+          updatedAt: Date(),
+          kind: response.intent == "coding" ? "codex_task" : nil
         ),
         at: 0
       )
@@ -603,6 +635,7 @@ final class RookDashboardModel: ObservableObject {
 
   @discardableResult
   func completeInstant(_ response: RookResponse, command: String, requestID: UUID) -> Bool {
+    streamingText.removeValue(forKey: requestID)
     let isLatest = latestRequestID == requestID
     if isLatest {
       latestCommand = command
@@ -654,11 +687,41 @@ final class RookDashboardModel: ObservableObject {
     }
   }
 
+  func markCodingTaskActive(requestID: UUID, workspaceName: String) {
+    updateRun(requestID) { run in
+      run.status = .working
+      run.kind = "codex_task"
+      run.workspaceName = workspaceName
+      run.pawns = []
+    }
+    guard latestRequestID == requestID else { return }
+    pawns = []
+    isDeliberating = true
+    isStreaming = false
+    deliberationLabel = "CODEX TASK STARTING"
+    responseText = "Codex is taking over the coding work in `\(workspaceName)` as one full task."
+  }
+
+  func updateCodingTaskProgress(requestID: UUID, label: String, taskID: String? = nil) {
+    updateRun(requestID) { run in
+      run.status = .working
+      run.kind = "codex_task"
+      if let taskID { run.taskID = taskID }
+    }
+    guard latestRequestID == requestID else { return }
+    pawns = []
+    isDeliberating = true
+    isStreaming = false
+    deliberationLabel = "CODEX TASK WORKING"
+    responseText = label
+  }
+
   @discardableResult
   func completeDeliberation(_ response: RookResponse, command: String, requestID: UUID) -> Bool {
     updateRun(requestID) { run in
-      run.status = response.intent == "error" ? .blocked : .completed
-      run.failureReason = response.intent == "error" ? response.spokenText : nil
+      let isBlocked = response.intent == "error" || response.intent == "clarification"
+      run.status = isBlocked ? .blocked : .completed
+      run.failureReason = isBlocked ? response.spokenText : nil
       run.pawns = response.pawns
     }
     let isLatest = latestRequestID == requestID
@@ -671,11 +734,13 @@ final class RookDashboardModel: ObservableObject {
       isDeliberating = false
       isStreaming = false
       deliberationLabel =
-        response.intent == "error"
-        ? "REQUEST BLOCKED"
-        : (response.pawns.isEmpty
-          ? "SYNTHESIS READY"
-          : "SYNTHESIS READY · \(response.pawns.count) PAWN\(response.pawns.count == 1 ? "" : "S")")
+        response.intent == "clarification"
+        ? "WAITING FOR DETAIL"
+        : (response.intent == "error"
+          ? "REQUEST BLOCKED"
+          : (response.pawns.isEmpty
+            ? "SYNTHESIS READY"
+            : "SYNTHESIS READY · \(response.pawns.count) PAWN\(response.pawns.count == 1 ? "" : "S")"))
       timelineItems = []
     }
     refreshQueue()

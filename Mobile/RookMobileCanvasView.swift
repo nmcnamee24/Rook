@@ -6,7 +6,7 @@ struct RookMobileCanvasView: View {
 
   var body: some View {
     RookMobileCard {
-      VStack(alignment: .leading, spacing: 15) {
+      VStack(alignment: .leading, spacing: 14) {
         header
         bodyContent
         if !block.asOf.isEmpty || !block.sourceLabel.isEmpty {
@@ -23,27 +23,23 @@ struct RookMobileCanvasView: View {
   }
 
   private var header: some View {
-    HStack(alignment: .top, spacing: 11) {
+    HStack(alignment: .center, spacing: 11) {
       Image(systemName: symbolName(block.items.first?.symbol ?? fallbackSymbol))
-        .font(.system(size: 16, weight: .bold))
+        .font(.system(size: 15, weight: .semibold))
         .foregroundStyle(RookMobilePalette.accent)
         .frame(width: 32, height: 32)
-        .background(RookMobilePalette.accent.opacity(0.08), in: Circle())
+        .background(RookMobilePalette.accent.opacity(0.1), in: Circle())
       VStack(alignment: .leading, spacing: 2) {
         Text(block.title)
-          .font(.system(size: 20, weight: .medium, design: .serif))
+          .font(.headline)
           .foregroundStyle(RookMobilePalette.ink)
         if !block.subtitle.isEmpty {
           Text(block.subtitle)
-            .font(.system(size: 11, weight: .medium))
+            .font(.caption)
             .foregroundStyle(RookMobilePalette.muted)
         }
       }
       Spacer()
-      Text(block.kind.rawValue.uppercased())
-        .font(.system(size: 8, weight: .black))
-        .tracking(0.8)
-        .foregroundStyle(RookMobilePalette.faint)
     }
   }
 
@@ -80,7 +76,7 @@ struct RookMobileCanvasView: View {
               .font(.system(size: 23, weight: .medium))
               .foregroundStyle(RookMobilePalette.accent)
             Text(item.value)
-              .font(.system(size: 18, design: .serif))
+              .font(.system(size: 18, weight: .medium, design: .rounded))
               .foregroundStyle(RookMobilePalette.ink)
             Text(item.detail)
               .font(.system(size: 10))
@@ -163,7 +159,7 @@ struct RookMobileCanvasView: View {
           VStack(alignment: .leading, spacing: 4) {
             if !block.body.isEmpty {
               Text(block.body)
-                .font(.system(size: 17, design: .serif))
+                .font(.headline)
                 .foregroundStyle(RookMobilePalette.ink)
                 .lineLimit(2)
             }

@@ -86,7 +86,7 @@ struct RookMarkdownView: View {
           .foregroundStyle(RookPalette.ink)
           .padding(14)
       }
-      .background(RookPalette.ink.opacity(0.045), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+      .rookGlassInset(cornerRadius: 8, tintOpacity: 0.02)
 
     case .table(let headers, let rows):
       markdownTable(headers: headers, rows: rows)
@@ -132,12 +132,9 @@ struct RookMarkdownView: View {
         }
       }
       .padding(.horizontal, 14)
-      .background(RookPalette.paperBright.opacity(0.62))
+      .background(Color.clear)
     }
-    .overlay {
-      RoundedRectangle(cornerRadius: 8, style: .continuous)
-        .stroke(RookPalette.line.opacity(0.82), lineWidth: 1)
-    }
+    .rookGlassInset(cornerRadius: 8, tintOpacity: 0.025)
     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
   }
 

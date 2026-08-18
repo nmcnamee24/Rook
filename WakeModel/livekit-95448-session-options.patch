@@ -1,0 +1,14 @@
+diff --git a/src/livekit/wakeword/data/features.py b/src/livekit/wakeword/data/features.py
+index ffab2da..7042f82 100644
+--- a/src/livekit/wakeword/data/features.py
++++ b/src/livekit/wakeword/data/features.py
+@@ -72,5 +72,8 @@ def extract_features_from_directory(
+-def run_extraction(config: WakeWordConfig, sess_options: SessionOptions) -> None:
++def run_extraction(
++    config: WakeWordConfig, sess_options: SessionOptions | None = None
++) -> None:
+     """Extract and save features for all splits of a wake word config."""
++    sess_options = sess_options or SessionOptions()
+     mel_frontend = MelSpectrogramFrontend(
+         onnx_path=get_mel_model_path(),
+         sess_options=sess_options,

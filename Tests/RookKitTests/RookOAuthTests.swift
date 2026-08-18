@@ -37,6 +37,22 @@ final class RookOAuthTests: XCTestCase {
     XCTAssertFalse(persisted.localizedCaseInsensitiveContains("secret"))
   }
 
+  func testBundledClientIDFillsOnlyMissingDeveloperConfiguration() {
+    let bundled = RookOAuthClientConfiguration(
+      googleClientID: "bundled.apps.googleusercontent.com",
+      spotifyClientID: String(repeating: "s", count: 32)
+    )
+    let empty = RookOAuthClientConfiguration().resolvingFallback(bundled)
+    XCTAssertEqual(empty, bundled)
+
+    let developerSpotifyID = String(repeating: "d", count: 32)
+    let overridden = RookOAuthClientConfiguration(
+      spotifyClientID: developerSpotifyID
+    ).resolvingFallback(bundled)
+    XCTAssertEqual(overridden.googleClientID, bundled.googleClientID)
+    XCTAssertEqual(overridden.spotifyClientID, developerSpotifyID)
+  }
+
   func testGoogleScopeSetAvoidsFullMailboxAndFullCalendarScopes() {
     let scopes = RookOAuthProviderDefinition.definition(for: .google).scopes
     XCTAssertTrue(scopes.contains("https://www.googleapis.com/auth/gmail.readonly"))

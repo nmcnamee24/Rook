@@ -1,0 +1,32 @@
+{
+  "originHash" : "6eb365100a79a7b0ae0676c48f396990a0a808c187b89a703c89fadb5f9d1843",
+  "pins" : [
+    {
+      "identity" : "fluidaudio",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/FluidInference/FluidAudio.git",
+      "state" : {
+        "revision" : "3c6e79f1d74411cae1f3daf50260dd19a585dc2d",
+        "version" : "0.15.3"
+      }
+    },
+    {
+      "identity" : "livekit-wakeword",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/livekit/livekit-wakeword",
+      "state" : {
+        "revision" : "95448a7559c453fcd87645bd67b247ffb45f85b0"
+      }
+    },
+    {
+      "identity" : "onnxruntime-swift-package-manager",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/microsoft/onnxruntime-swift-package-manager",
+      "state" : {
+        "revision" : "b7fb7f7dea8a2469e6335d95a61b8f36d0dc83b2",
+        "version" : "1.24.2"
+      }
+    }
+  ],
+  "version" : 3
+}

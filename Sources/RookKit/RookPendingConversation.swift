@@ -2,6 +2,7 @@ import Foundation
 
 public enum RookPendingConversationDomain: String, Codable, Equatable, Sendable {
   case general
+  case spotifyHybrid = "spotify_hybrid"
   case spotifyPlaylist = "spotify_playlist"
 }
 
@@ -164,7 +165,7 @@ public struct RookPendingConversationStore {
       " it", " that", " one", " instead", "actually", "the first", "the second", "the third", "same one",
     ].contains { normalized == $0.trimmingCharacters(in: .whitespaces) || normalized.contains($0) }
 
-    if pending.domain == .spotifyPlaylist {
+    if pending.domain == .spotifyPlaylist || pending.domain == .spotifyHybrid {
       let unrelatedTopics = [
         "weather", "calendar", "email", "gmail", "safari", "browser", "code", "timer", "reminder",
         "screenshot", "document", "resume", "message", "lights", "light", "phone", "facetime",
@@ -218,8 +219,15 @@ public enum RookPendingConversationDetector {
         || clarificationSignals.contains(where: { normalized.contains($0) })
     else { return nil }
 
-    let isPlaylistChoice = route == "spotify_native" && normalized.contains("playlist")
-    let domain: RookPendingConversationDomain = isPlaylistChoice ? .spotifyPlaylist : .general
+    let isPlaylistChoice = normalized.contains("playlist")
+    let domain: RookPendingConversationDomain
+    if route == "spotify_hybrid", isPlaylistChoice {
+      domain = .spotifyHybrid
+    } else if route == "spotify_native", isPlaylistChoice {
+      domain = .spotifyPlaylist
+    } else {
+      domain = .general
+    }
     let asksForChoice = normalized.contains("which") || normalized.contains("choose") || normalized.contains("select")
     let options =
       asksForChoice

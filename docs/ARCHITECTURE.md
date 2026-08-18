@@ -6,21 +6,22 @@ Rook is a private native macOS command center with a local-first fast path and a
 
 ```mermaid
 flowchart TD
-  A["Voice or typed command"] --> B["Wake phrase and command parser"]
-  B --> R["Context-aware inference preflight"]
+  A["Voice or typed command"] --> B["Transcription and cleanup"]
+  B --> R["Continuity and exact fast-path gate"]
+  B --> T["Private monotonic request trace"]
   R --> P["Librarian project graph"]
-  P --> C{"Direct capability guide"}
+  P --> C{"Exact typed capability?"}
   C -->|Reflex| D["Rook Reflex"]
   C -->|Weather| E["Native weather service"]
-  C -->|Spotify account| S["Direct Spotify client"]
+  C -->|Spotify| S["Direct Spotify client"]
   C -->|Explicit visual inspection| V["Private screen capture"]
   C -->|Computer control| F["Native computer controller"]
   C -->|Fresh checkpoint| Q["Librarian cached answer"]
-  C -->|Direct plus specialist clauses| Y["Ordered hybrid plan"]
-  C -->|Adapter declined| I
-  C -->|Unclaimed| G{"Stable ordinary question?"}
-  G -->|Yes| H["Read-only streaming Codex thread"]
-  G -->|No| I["Central Rook deliberate session"]
+  C -->|Unclaimed or declined| G{"Central Rook delegator"}
+  G -->|Answer now| K
+  G -->|Clarify| K
+  G -->|Coding work| Z["Saved full Codex task"]
+  G -->|Work needed| I["Deep Central Rook session"]
   I --> J["Silent bounded pawn crew"]
   D --> K["Response and Canvas"]
   E --> K
@@ -28,12 +29,13 @@ flowchart TD
   V --> I
   F --> K
   Q --> K
-  Y --> I
-  H --> K
   J --> I
+  Z --> K
   I --> K
   K --> L["On-screen result and concise speech"]
   K --> M["Librarian archive"]
+  K --> T
+  T --> X["Metrics and failure classification"]
 ```
 
 ## Components
@@ -41,10 +43,14 @@ flowchart TD
 | Area | Source | Responsibility |
 |---|---|---|
 | Models and schemas | `Sources/RookKit/Models.swift` | Codable response, Canvas, pawn-result/evidence, and checkpoint contracts |
-| Routing | `Sources/RookKit/LocalRookRouter.swift` | Chooses instant, streamed, or deliberate handling |
-| Inference preflight | `Sources/RookKit/RookInferenceLayer.swift` | Interprets retries, conversational referents, and atomic semantic actions before literal parsing, then selects direct, hybrid, clarification, or general routing ownership |
-| Direct capability guide | `Sources/RookKit/RookDirectCapabilityGuide.swift` | Keeps the ordered no-pawn adapter cheat sheet, gives weather and Spotify a semantic second chance, and marks known-domain misses for deliberate fallback |
-| Hybrid capability planner | `Sources/RookKit/RookHybridCapabilityPlan.swift` | Splits explicit compound requests into ordered central-capability and pawn-eligible steps without delegating Computer Use |
+| Task tracing and recovery | `Sources/RookKit/RookTaskTrace.swift` | Persists private monotonic request stages, classifies failures, recommends bounded recovery, and summarizes first-attempt success and latency |
+| Routing benchmark | `Sources/RookKit/RookRoutingBenchmark.swift` | Verifies exact fast paths and that semantic or compound work reaches Central Rook intact |
+| Deterministic gate | `Sources/RookKit/LocalRookRouter.swift` | Answers only exact conversational checks and otherwise produces an empty Central Rook handoff |
+| Inference preflight | `Sources/RookKit/RookInferenceLayer.swift` | Resolves retries, approval continuations, and unique recent referents without semantically guessing a new request's owner |
+| Direct capability guide | `Sources/RookKit/RookDirectCapabilityGuide.swift` | Attempts the ordered exact no-pawn adapters and leaves semantic, compound, unsupported, or uncertain work unclaimed |
+| Central delegator | `Sources/RookKit/RookStreamingClient.swift`, `Sources/RookCore/RookAppDelegate.swift` | Uses one prewarmed read-only structured pass to answer, clarify, or start deep Central work with an optional pawn plan |
+| Full Codex coding handoff | `Sources/RookKit/RookCodingTask.swift`, `Sources/RookCore/RookAppDelegate.swift` | Creates one saved non-ephemeral Codex task in the verified checkout, inherits normal Codex configuration, persists its thread/outcome, and reports through Activity and Library |
+| Legacy hybrid compatibility | `Sources/RookKit/RookHybridCapabilityPlan.swift`, `RookTaskExecutor.swift` | Safely resumes an already-open Spotify workflow, preserving verified dependencies without acting as the primary router |
 | Reflex parsing | `Sources/RookKit/RookReflexIntent.swift` | Recognizes bounded calculations, conversions, alerts, and device commands |
 | Direct Spotify | `Sources/RookKit/RookSpotify.swift` | Parses exact account commands, ranks personal playlists for study/work/focus intent from titles and descriptions, refreshes OAuth access, resolves playlists and catalog items, controls Spotify Connect devices, and returns attributed Spotify Canvas panels |
 | Codex integration | `Sources/RookKit/CodexBridge.swift` | Runs central Rook, checkpoints, policy profiles, and bounded crews |
@@ -53,7 +59,8 @@ flowchart TD
 | Project graph | `Sources/RookKit/RookLibraryGraph.swift` | Seeds project identity and bounded source provenance from the high-level local Codex memory registry, persists project/category/topic nodes, writes inspectable Obsidian-compatible notes, and resolves implicit references by semantic match, recency, and dominant activity |
 | Conversation continuity | `Sources/RookKit/RookLibrary.swift` | Resolves bounded retry references and supplies graph-ranked context plus a newest-first recent thread |
 | App orchestration | `Sources/RookCore/RookAppDelegate.swift` | Owns request lifecycle, UI state, speech, routing, and completion |
-| Voice | `Sources/RookCore/VoiceController.swift` | On-device recognition, wake capture, and speech playback |
+| Voice | `Sources/RookCore/VoiceController.swift`, `LocalWakeWordDetector.swift` | Streams audio to an isolated local wake process while retaining one continuous on-device Apple command transcript, adaptive endpointing, and speech playback |
+| Wake runtime | `Sources/RookWakeTool/`, `WakeModel/`, `scripts/train-livekit-wake.sh` | Runs the pinned LiveKit WakeWord Swift/ONNX stack, trains a Rook-owned classifier, and emits only bounded readiness/wake events |
 | Fast services | `Sources/RookCore/RookWeatherService.swift`, `RookReflexController.swift`, `RookComputerController.swift` | Executes narrow local capabilities without model latency |
 | Private screen capture | `Sources/RookKit/RookScreenCaptureIntent.swift`, `Sources/RookCore/RookScreenCaptureController.swift` | Recognizes explicit capture requests, targets a display or visible window with ScreenCaptureKit, stores an opaque private image, and attaches it to central Rook |
 | Command center | `Sources/RookCore/RookDashboardView.swift`, `RookCanvasView.swift` | Renders Today, Pawns, Moves, Canvas, and the clickable Library graph/pawn evidence inspectors |
@@ -66,8 +73,8 @@ flowchart TD
 
 ## Trust boundaries
 
-1. The inference preflight first resolves pending answers, retries, unique recent referents, and same-domain semantic actions before any literal parser. It then asks the direct capability guide to classify the interpreted command. A known-domain adapter miss preserves the intact command and explicitly routes to central Rook. Explicit multi-part requests may become one ordered hybrid plan; central Rook owns native and Computer Use steps while pawns receive only independent specialist work.
-2. The ordinary streamed thread is read-only and has no tools or external-action authority.
+1. The inference preflight resolves pending answers, retries, approvals, and unique recent referents before literal parsing. Only an exact typed parser may bypass Central Rook; semantic, compound, unsupported, and uncertain requests remain intact and unclaimed.
+2. The prewarmed Central Rook delegator is read-only and returns only a structured answer, clarification, or deliberate handoff. It has no tools or external-action authority.
 3. Task pawns and Librarian workers may inspect or reason but never speak, mutate external systems, or control apps.
 4. Central Rook is the only user-visible synthesis and action authority.
 5. Consequential commitments require an exact approval or mandatory user handoff.
@@ -78,6 +85,10 @@ flowchart TD
 10. Direct Spotify receives only an expiring access token from the Keychain-backed OAuth coordinator. It never exposes tokens or raw provider errors, does not mutate playlists or the saved library, and falls back to a clarification when item or device matching is ambiguous. Purpose matching is deterministic and inspectable: study, work, and focus requests consider only the connected library's playlist titles and Spotify descriptions, return at most five likely fits, and preserve those names for the next short playback answer.
 11. Pawn inspection exposes only attributable result summaries and bounded evidence. Hidden reasoning, raw pawn messages, credentials, tokens, tracking URLs, and unnecessary private content are never persisted for UI inspection.
 12. Online Canvas images require public HTTPS URLs with no local/private host, embedded credentials, auth tokens, or tracking parameters. Generated images use only artifacts recovered from the exact completed Codex session; a model cannot mint or choose a local media path.
+13. Every live request has one private request ID and monotonic trace. Failure recovery starts from a structured category such as ambiguity, authentication, permission, timeout, provider availability, policy, dependency, execution, or verification. Rook does not silently switch a supported native domain to Computer Use, and repeated failures may inform a reviewed routing rule but never rewrite authority or permissions automatically.
+14. Idle microphone audio is converted once and consumed locally by the Apple command transcriber and, when installed, Rook's isolated LiveKit/ONNX wake process. A bounded 1.2-second PCM pre-roll and the wake process's rolling two-second inference window remain memory-only. The process emits readiness, confidence, and wake timing, never transcript or audio payloads. The owned model remains mode-protected under `~/.codex/rook/wake` and is accepted only with a passing SHA-256-bound corpus report. Apple wake matching is used when the validated local path is unavailable and fallback is enabled.
+15. The retained native task-executor slice may resume Spotify-only central steps for an already-open hybrid conversation. It records explicit step state, verifies a playback mutation through read-only player state, rejects stale pre-command context, and passes only bounded track, artist, device, and state receipts to dependent Central Rook research. It does not classify new requests.
+16. Coding remains Central-first but is not executed by a Rook-specific mini-agent. Central emits the structured `coding` intent only after understanding the full request; the host then requires one verified checkout and creates one saved non-ephemeral Codex task there. The task inherits normal Codex configuration without Rook's response schema, remains repository-scoped, and is recorded privately for inspection and continuation. Forge pawns never duplicate that task.
 
 ## Mobile request flow
 

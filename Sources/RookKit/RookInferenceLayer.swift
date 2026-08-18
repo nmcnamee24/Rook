@@ -46,9 +46,9 @@ public struct RookInferenceDecision: Equatable, Sendable {
   }
 }
 
-/// Rook's pre-router inference pass. It runs before Reflex and every other
-/// literal capability parser so conversational references and single semantic
-/// actions are understood before execution ownership is assigned.
+/// Rook's deterministic continuity pass. It resolves only high-confidence
+/// retries, approvals, and recent referents before the exact fast-path gate.
+/// General semantic interpretation and worker ownership belong to Central Rook.
 public enum RookInferenceLayer {
   public static func interpret(
     _ rawCommand: String,
@@ -120,17 +120,6 @@ public enum RookInferenceLayer {
       )
     }
 
-    if let atomicSpotify = atomicSpotifyIntent(original) {
-      return RookInferenceInterpretation(
-        originalCommand: original,
-        effectiveCommand: original,
-        displayCommand: original,
-        basis: .semanticCapability,
-        confidence: 0.94,
-        inferredResolution: .spotify(atomicSpotify)
-      )
-    }
-
     return RookInferenceInterpretation(
       originalCommand: original,
       effectiveCommand: original,
@@ -152,17 +141,6 @@ public enum RookInferenceLayer {
         cachedDecision: cachedDecision
       )
     return RookInferenceDecision(interpretation: interpretation, resolution: resolution)
-  }
-
-  private static func atomicSpotifyIntent(_ command: String) -> RookSpotifyIntent? {
-    let normalized = normalize(command)
-    guard containsWord("playlist", in: normalized) else { return nil }
-    let asksToFind = containsAnyWord(["find", "choose", "pick", "select"], in: normalized)
-    let asksToPlay = containsAnyWord(["play", "start"], in: normalized) || normalized.contains("put on")
-    guard asksToFind, asksToPlay else { return nil }
-
-    let purposes = RookSpotifyPurposeMatcher.purposes(in: command)
-    return purposes.isEmpty ? .choosePlaylist : .playForPurpose(purposes: purposes)
   }
 
   private static func recentApprovalTarget(

@@ -17,9 +17,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-	<string>2.23</string>
+	<string>2.27</string>
     <key>CFBundleVersion</key>
-	<string>26</string>
+	<string>30</string>
     <key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
     <key>LSUIElement</key>
@@ -40,6 +40,8 @@
     <string>Rook uses an approximate location to prepare instant local weather.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Rook controls playback in apps such as Spotify when you explicitly ask.</string>
+    <key>RookSpotifyClientID</key>
+    <string></string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>Rook converts your spoken command to text using macOS speech recognition.</string>
 </dict>

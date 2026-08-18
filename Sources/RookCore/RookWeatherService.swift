@@ -450,7 +450,7 @@ final class RookWeatherService: NSObject, @preconcurrency CLLocationManagerDeleg
   ) {
     var request = URLRequest(url: url)
     request.timeoutInterval = requestLimit
-    request.setValue("Rook/2.23 personal weather assistant", forHTTPHeaderField: "User-Agent")
+    request.setValue("Rook/2.27 personal weather assistant", forHTTPHeaderField: "User-Agent")
     session.dataTask(with: request) { data, response, error in
       let result: Result<Value, Error>
       if let error {

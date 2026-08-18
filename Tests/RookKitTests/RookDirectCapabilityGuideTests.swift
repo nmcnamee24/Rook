@@ -17,40 +17,62 @@ final class RookDirectCapabilityGuideTests: XCTestCase {
     )
     XCTAssertTrue(RookDirectCapabilityGuide.cheatSheet.allSatisfy { !$0.adapter.isEmpty })
     XCTAssertTrue(RookDirectCapabilityGuide.cheatSheet.allSatisfy { !$0.fallback.isEmpty })
-  }
-
-  func testCasualWeatherLanguageGetsANativeSecondChance() {
-    XCTAssertEqual(
-      RookDirectCapabilityGuide.resolve("Will it rain tomorrow in Boston?"),
-      .weather(RookWeatherRequest(locationQuery: "Boston", dayOffset: 1, dayCount: 1))
-    )
-    XCTAssertEqual(
-      RookDirectCapabilityGuide.resolve("How cold is it in Oakland today?"),
-      .weather(RookWeatherRequest(locationQuery: "Oakland", dayOffset: 0, dayCount: 1))
-    )
-    XCTAssertEqual(
-      RookDirectCapabilityGuide.resolve("Could you check the next three day forecast?"),
-      .weather(RookWeatherRequest(locationQuery: nil, dayOffset: 0, dayCount: 3))
+    XCTAssertTrue(
+      RookDirectCapabilityGuide.cheatSheet.allSatisfy {
+        $0.executionContract.capability == $0.id
+          && !$0.executionContract.adapter.isEmpty
+          && !$0.executionContract.verification.isEmpty
+      }
     )
   }
 
-  func testNaturalSpotifyLanguageStaysDirectWithoutDependingOnConnectionState() {
-    XCTAssertEqual(
-      RookDirectCapabilityGuide.resolve(
-        "Could you pull up everything in my Spotify playlist collection"
+  func testNonSpotifyCapabilitiesDeclareDependentWorkContracts() {
+    let weather = RookDirectCapabilityGuide.executionContract(for: .weather)
+    XCTAssertEqual(weather.adapter, "open_meteo")
+    XCTAssertEqual(weather.effect, .readOnly)
+    XCTAssertEqual(weather.retryRule, .retryReadOnce)
+    XCTAssertTrue(weather.mayFeedDependentWork)
+
+    let computer = RookDirectCapabilityGuide.executionContract(for: .computerControl)
+    XCTAssertEqual(computer.adapter, "native_mac_controller")
+    XCTAssertEqual(computer.retryRule, .neverRepeatMutation)
+
+    let plan = RookHybridCapabilityPlan(steps: [
+      RookHybridPlanStep(
+        order: 1,
+        clause: "Weather in Boston today",
+        capabilities: [.weather],
+        owner: .central
       ),
-      .spotify(.playlists)
-    )
-    XCTAssertEqual(
-      RookDirectCapabilityGuide.resolve("Put on something from my most played Spotify songs"),
-      .spotify(.playTopTracks)
-    )
-    XCTAssertEqual(
-      RookDirectCapabilityGuide.resolve(
-        "Which of these playlists seems like a study or work or focus playlist?"
+      RookHybridPlanStep(
+        order: 2,
+        clause: "explain whether I should bring a coat",
+        capabilities: [],
+        owner: .pawnEligible,
+        dependsOn: [1]
       ),
-      .spotify(.recommendPlaylists(purposes: [.study, .work, .focus]))
-    )
+    ])
+    XCTAssertEqual(plan.executionContracts, [weather])
+  }
+
+  func testSemanticWeatherLanguageGoesToCentralRook() {
+    for command in [
+      "Will it rain tomorrow in Boston?",
+      "How cold is it in Oakland today?",
+      "Could you check the next three day forecast?",
+    ] {
+      XCTAssertEqual(RookDirectCapabilityGuide.resolve(command), .unclaimed)
+    }
+  }
+
+  func testSemanticSpotifyLanguageGoesToCentralRook() {
+    for command in [
+      "Could you pull up everything in my Spotify playlist collection",
+      "Put on something from my most played Spotify songs",
+      "Which of these playlists seems like a study or work or focus playlist?",
+    ] {
+      XCTAssertEqual(RookDirectCapabilityGuide.resolve(command), .unclaimed)
+    }
   }
 
   func testOtherNativeCommandsStillWinOverKeywordMentions() {
@@ -64,14 +86,14 @@ final class RookDirectCapabilityGuideTests: XCTestCase {
     )
   }
 
-  func testUnsupportedKnownDomainsFallThroughInsteadOfExecutingAPartialMatch() {
+  func testUnsupportedKnownDomainsStayUnclaimedInsteadOfExecutingAPartialMatch() {
     XCTAssertEqual(
       RookDirectCapabilityGuide.resolve("Are there weather alerts near the beach?"),
-      .fallThrough(.weather)
+      .unclaimed
     )
     XCTAssertEqual(
       RookDirectCapabilityGuide.resolve("How does Spotify Wrapped work?"),
-      .fallThrough(.spotify)
+      .unclaimed
     )
 
     let weatherFallback = LocalRookRouter.routeAfterDirectCapabilityMiss(
@@ -83,9 +105,9 @@ final class RookDirectCapabilityGuideTests: XCTestCase {
       capability: .spotify
     )
     XCTAssertEqual(weatherFallback.destination, .deliberate)
-    XCTAssertFalse(weatherFallback.response.pawns.isEmpty)
+    XCTAssertTrue(weatherFallback.response.pawns.isEmpty)
     XCTAssertEqual(spotifyFallback.destination, .deliberate)
-    XCTAssertFalse(spotifyFallback.response.pawns.isEmpty)
+    XCTAssertTrue(spotifyFallback.response.pawns.isEmpty)
   }
 
   func testFreshLibrarianDecisionIsPartOfTheSameGuide() {
@@ -106,11 +128,12 @@ final class RookDirectCapabilityGuideTests: XCTestCase {
     )
   }
 
-  func testComputerControlAndPawnWorkBecomeOneOrderedHybridPlan() throws {
-    let resolution = RookDirectCapabilityGuide.resolve(
-      "Open Spotify and research the artist playing right now"
-    )
-    guard case .hybrid(let plan) = resolution else {
+  func testLegacyHybridPlannerCanRestoreOneOrderedPlan() throws {
+    guard
+      let plan = RookHybridCapabilityPlanner.plan(
+        "Open Spotify and research the artist playing right now"
+      )
+    else {
       return XCTFail("Expected a hybrid capability plan")
     }
 
@@ -124,15 +147,15 @@ final class RookDirectCapabilityGuideTests: XCTestCase {
       plan: plan
     )
     XCTAssertEqual(decision.destination, .deliberate)
-    XCTAssertTrue(decision.response.pawns.contains { $0.pawn == "Scout" })
-    XCTAssertFalse(decision.response.pawns.contains { $0.task.localizedCaseInsensitiveContains("open spotify") })
+    XCTAssertTrue(decision.response.pawns.isEmpty)
   }
 
-  func testHybridPlanPreservesCentralStepAfterPawnEligibleResearch() throws {
-    let resolution = RookDirectCapabilityGuide.resolve(
-      "Research the best focus playlist then open Spotify"
-    )
-    guard case .hybrid(let plan) = resolution else {
+  func testLegacyHybridPlannerPreservesCentralStepAfterPawnEligibleResearch() throws {
+    guard
+      let plan = RookHybridCapabilityPlanner.plan(
+        "Research the best focus playlist then open Spotify"
+      )
+    else {
       return XCTFail("Expected a hybrid capability plan")
     }
 
@@ -144,6 +167,28 @@ final class RookDirectCapabilityGuideTests: XCTestCase {
     XCTAssertEqual(
       RookDirectCapabilityGuide.resolve("Open Spotify and play my music"),
       .spotify(.resume)
+    )
+  }
+
+  func testLegacySpotifyPlanRemainsDependencyOrderedForInFlightWork() throws {
+    let command =
+      "Open Spotify, play a playlist, and tell me about the song that's playing and research the artist."
+    guard let plan = RookHybridCapabilityPlanner.plan(command) else {
+      return XCTFail("Expected a dependent Spotify and research plan")
+    }
+
+    XCTAssertEqual(plan.steps.map(\.owner), [.central, .central, .pawnEligible])
+    XCTAssertEqual(plan.steps[0].capabilities, [.spotify])
+    XCTAssertEqual(plan.steps[1].capabilities, [.spotify])
+    XCTAssertEqual(plan.steps[1].dependsOn, [1])
+    XCTAssertEqual(plan.steps[2].dependsOn, [2])
+    XCTAssertFalse(plan.requiresComputerOperator)
+  }
+
+  func testOpeningBrowserAtAddressStaysOnNarrowNativeController() {
+    XCTAssertEqual(
+      RookDirectCapabilityGuide.resolve("Open Safari and go to https://example.com"),
+      .computerControl(.openWebAddress(browser: .safari, address: "https://example.com"))
     )
   }
 }
